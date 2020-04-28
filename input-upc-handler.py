@@ -26,11 +26,11 @@ for event in usb_scanner.read_loop():
                 scan_buffer.append(k)
             else:
                 scanned_code = int("".join(scan_buffer))
-                print(list(opcodes.values()))
-                print(scanned_code)
                 if scanned_code in list(opcodes.values()):
                     for k in opcodes.items():
                         if k[1] == scanned_code:
                             print(f"OPCODE DETECTED: {k[0]}")
+                else:
+                    print(f"BARCODE SCANNED: {scanned_code}")
                 scan_buffer = []
 
