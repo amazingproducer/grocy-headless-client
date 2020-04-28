@@ -3,7 +3,15 @@
 import evdev
 
 INPUT_LISTENER = '/dev/input/event11'
+BARCODE_CREATE = 10100
+BARCODE_INCREMENT = 10101
+BARCODE_DECREMENT = 10102
 
+opcodes = {
+    "BARCODE_CREATE":10100,
+    "BARCODE_INCREMENT":10101,
+    "BARCODE_DECREMENT":10102
+    }
 usb_scanner = evdev.InputDevice(INPUT_LISTENER)
 usb_scanner.grab()
 
@@ -17,7 +25,12 @@ for event in usb_scanner.read_loop():
             if k != "ENTER":
                 scan_buffer.append(k)
             else:
-                scanned_code = "".join(scan_buffer)
+                scanned_code = int("".join(scan_buffer))
+                print(list(opcodes.values()))
                 print(scanned_code)
+                if scanned_code in list(opcodes.values()):
+                    for k in opcodes.items():
+                        if k[1] == scanned_code:
+                            print(f"OPCODE DETECTED: {k[0]}")
                 scan_buffer = []
 
