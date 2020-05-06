@@ -5,13 +5,15 @@ import requests
 import json
 import os
 
-INPUT_LISTENER = "/dev/input/event11"
+INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
 GROCY_API_KEY = os.environ["GROCY_API_KEY"]
 BARCODE_CREATE = "10100"
 BARCODE_INCREMENT = "10101"
 BARCODE_DECREMENT = "10102"
+BARCODE_API_URL = "http://10.8.0.55:5555"
 
+barcode_api_sources = ["off","usda","uhtt"]
 
 opcodes = {
     "create":BARCODE_CREATE,
@@ -69,21 +71,27 @@ class InputHandler():
         print(f"API response: {r.text}")
 
     def build_create_request(url):
-        print("building request to create item...")
-        head = {}
-        head["content-type"] = "application/json"
-        head["GROCY-API-KEY"] = GROCY_API_KEY
-        req = {}
-        req["name"] = "untitled"
-        req["barcode"] = InputHandler.scanned_code
-        req["location_id"] = 0
-        req["qu_id_purchase"] = 0
-        req["qu_id_stock"] = 0
-        req["qu_factor_purchase_to_stock"] = "1.0"
-        d = json.dumps(req)
-        r = requests.post(url, data=d, headers=head)
-        print(f"API request: {r.request}")
-        print(f"API response: {r.text}")
+        print(f"We'd be inputting to {url} if we had product data to add...")
+        for i in barcode_api_sources:
+            r_url = f"{BARCODE_API_URL}/{i}/{InputHandler.scanned_code}"
+            print(f"Sending request to {r_url}...")
+            r = requests.get(r_url)
+            print(f"{i} response: {r.text}")
+        # print("building request to create item...")
+        # head = {}
+        # head["content-type"] = "application/json"
+        # head["GROCY-API-KEY"] = GROCY_API_KEY
+        # req = {}
+        # req["name"] = "untitled"
+        # req["barcode"] = InputHandler.scanned_code
+        # req["location_id"] = 0
+        # req["qu_id_purchase"] = 0
+        # req["qu_id_stock"] = 0
+        # req["qu_factor_purchase_to_stock"] = "1.0"
+        # d = json.dumps(req)
+        # r = requests.post(url, data=d, headers=head)
+        # print(f"API request: {r.request}")
+        # print(f"API response: {r.text}")
 
 
 
@@ -105,4 +113,16 @@ class InputHandler():
                         scan_buffer = []
                         InputHandler.process_scan(scanned_code)
 
+    def select_scanner(): # this is ugly and bad and i should feel bad for writing it
+        devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+        for device in devices:
+            faith = 0
+            for i in ["bar", "code", "scanner"]:
+                if i in device.name.lower():
+                    faith += 1
+            if faith > 1:
+                INPUT_LISTENER = device.path
+                break
+
+InputHandler.select_scanner()
 InputHandler.await_scan()
