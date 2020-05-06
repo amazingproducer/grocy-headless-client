@@ -4,6 +4,7 @@ import evdev
 import requests
 import json
 import os
+from pathlib import Path
 
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
@@ -93,10 +94,28 @@ class InputHandler():
         # print(f"API request: {r.request}")
         # print(f"API response: {r.text}")
 
+    def select_scanner(): # this is ugly and bad and i should feel bad for writing it
+        devices = []
+        for i in range(20):
+            if Path(f"/dev/input/event{str(i)}").exists():
+                devices.append(f"/dev/input/event{str(i)}")
+#        print(devices)
+        for device in devices:
+#            print(evdev.InputDevice(device).name)
+            faith = 0
+            for i in ["bar", "code", "scanner"]:
+                if i in evdev.InputDevice(device).name.lower():
+                    faith += 1
+            if faith > 1:
+                print(f"Found scanner: {evdev.InputDevice(device).name}")
+                InputHandler.await_scan(device)
+                INPUT_LISTENER = device
+                break
+        print("No scanners found; exiting.")
 
 
-    def await_scan():
-        usb_scanner = evdev.InputDevice(INPUT_LISTENER)
+    def await_scan(dev):
+        usb_scanner = evdev.InputDevice(dev)
         usb_scanner.grab()
         scan_buffer = []
         scanned_code = InputHandler.scanned_code
@@ -113,16 +132,5 @@ class InputHandler():
                         scan_buffer = []
                         InputHandler.process_scan(scanned_code)
 
-    def select_scanner(): # this is ugly and bad and i should feel bad for writing it
-        devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-        for device in devices:
-            faith = 0
-            for i in ["bar", "code", "scanner"]:
-                if i in device.name.lower():
-                    faith += 1
-            if faith > 1:
-                INPUT_LISTENER = device.path
-                break
 
 InputHandler.select_scanner()
-InputHandler.await_scan()
