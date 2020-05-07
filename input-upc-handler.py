@@ -9,6 +9,9 @@ from pathlib import Path
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
 GROCY_API_KEY = os.environ["GROCY_API_KEY"]
+GROCY_DEFAULT_LOCATION_ID = "6"
+GROCY_DEFAULT_QUANTITY_UNIT = "5"
+
 BARCODE_CREATE = "10100"
 BARCODE_INCREMENT = "10101"
 BARCODE_DECREMENT = "10102"
@@ -37,6 +40,7 @@ endpoint_suffixes = {
 class InputHandler():
     active_opcode  = "add"
     scanned_code = ""
+    scanned_name = ""
 
     def process_scan(scanned_code):
         if scanned_code in list(opcodes.values()):
@@ -73,26 +77,36 @@ class InputHandler():
 
     def build_create_request(url):
         print(f"We'd be inputting to {url} if we had product data to add...")
-        for i in barcode_api_sources:
-            r_url = f"{BARCODE_API_URL}/{i}/{InputHandler.scanned_code}"
-            print(f"Sending request to {r_url}...")
-            r = requests.get(r_url)
-            print(f"{i} response: {r.text}")
-        # print("building request to create item...")
-        # head = {}
-        # head["content-type"] = "application/json"
-        # head["GROCY-API-KEY"] = GROCY_API_KEY
-        # req = {}
-        # req["name"] = "untitled"
-        # req["barcode"] = InputHandler.scanned_code
-        # req["location_id"] = 0
-        # req["qu_id_purchase"] = 0
-        # req["qu_id_stock"] = 0
-        # req["qu_factor_purchase_to_stock"] = "1.0"
-        # d = json.dumps(req)
-        # r = requests.post(url, data=d, headers=head)
-        # print(f"API request: {r.request}")
-        # print(f"API response: {r.text}")
+        r_url = f"{BARCODE_API_URL}/lookup/{InputHandler.scanned_code}"
+        print(f"Sending request to {r_url}...")
+        r = requests.get(r_url)
+ #       print(f"response: {r.text}")
+        r_dict = json.loads(r.text)
+#        print(r_dict)
+        found = False
+        for i in r_dict["results"]:
+            if ("error" not in i["result"]) and (not found):
+                found = True
+                InputHandler.scanned_name = i["result"]["product_name"]
+                print(f'JSON Parsed Name: {i["result"]["product_name"]}')
+        if not found:
+            print(f"No info found on scanned code: {InputHandler.scanned_code}")
+        else:
+            print("building request to create item...")
+            head = {}
+            head["content-type"] = "application/json"
+            head["GROCY-API-KEY"] = GROCY_API_KEY
+            req = {}
+            req["name"] = InputHandler.scanned_name
+            req["barcode"] = InputHandler.scanned_code
+            req["location_id"] = GROCY_DEFAULT_LOCATION_ID
+            req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
+            req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
+            req["qu_factor_purchase_to_stock"] = "1.0"
+            d = json.dumps(req)
+            r = requests.post(url, data=d, headers=head)
+            print(f"API request: {r.request}")
+            print(f"API response: {r.text}")
 
     def select_scanner(): # this is ugly and bad and i should feel bad for writing it
         devices = []
@@ -132,5 +146,9 @@ class InputHandler():
                         scan_buffer = []
                         InputHandler.process_scan(scanned_code)
 
+#debug laziness
+#InputHandler.scanned_code = "070470290614" # comment this debug laziness
+#InputHandler.build_create_request(endpoint_prefixes["create"]) # comment this debug laziness
 
+#uncomment for normalcy
 InputHandler.select_scanner()
