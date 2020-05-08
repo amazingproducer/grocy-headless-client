@@ -60,10 +60,11 @@ class InputHandler():
         else:
             print(f"API URL: {endpoint_prefixes[active_opcode]}")
             request_url = f"{endpoint_prefixes[active_opcode]}"
-        print("JSON request data required.")
-        InputHandler.build_create_request(endpoint_prefixes[active_opcode])
+            print("JSON request data required.")
+            InputHandler.build_create_request(endpoint_prefixes[active_opcode])
 
     def build_inventory_request(url):
+        prev_opcode = ""
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
@@ -72,13 +73,31 @@ class InputHandler():
         req["transaction_type"] = InputHandler.active_opcode
         d = json.dumps(req)
         r = requests.post(url, data=d, headers=head)
+        r_dict = json.loads(r.text)
         print(f"API request: {r.request}")
         print(f"API response: {r.text}")
+        if "id" in r_dict.keys():
+            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_name} succeeded.") # TODO make this better
+        elif "error_message" in r_dict.keys():
+            if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
+                print("Barcode not found in inventory; attempting to lookup product info via barcode.")
+                prev_opcode = InputHandler.active_opcode
+                InputHandler.active_opcode = "create"
+                InputHandler.build_api_url(InputHandler.scanned_code)
+                if InputHandler.scanned_name:
+                    print("New product created from found info. Reattempting inventory request.")
+                    InputHandler.active_opcode = prev_opcode
+                    InputHandler.build_inventory_request(url)
+                else:
+                    InputHandler.active_opcode = prev_opcode
+                    print("Barcode not found in any dataset; ignoring.")
+            else:
+                print(r_dict["error_message"])
+
 
     def build_create_request(url):
-        print(f"We'd be inputting to {url} if we had product data to add...")
         r_url = f"{BARCODE_API_URL}/lookup/{InputHandler.scanned_code}"
-        print(f"Sending request to {r_url}...")
+        print(f"Sending upc request to {r_url}...")
         r = requests.get(r_url)
  #       print(f"response: {r.text}")
         r_dict = json.loads(r.text)
@@ -90,6 +109,7 @@ class InputHandler():
                 InputHandler.scanned_name = i["result"]["product_name"]
                 print(f'JSON Parsed Name: {i["result"]["product_name"]}')
         if not found:
+            InputHandler.scanned_name = ""
             print(f"No info found on scanned code: {InputHandler.scanned_code}")
         else:
             print("building request to create item...")
@@ -104,6 +124,7 @@ class InputHandler():
             req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
             req["qu_factor_purchase_to_stock"] = "1.0"
             d = json.dumps(req)
+            print(f"Sending grocy request to {url}")
             r = requests.post(url, data=d, headers=head)
             print(f"API request: {r.request}")
             print(f"API response: {r.text}")
