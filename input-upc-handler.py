@@ -9,20 +9,19 @@ from pathlib import Path
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
 GROCY_API_KEY = os.environ["GROCY_API_KEY"]
-GROCY_DEFAULT_LOCATION_ID = "6"
-GROCY_DEFAULT_QUANTITY_UNIT = "5"
 
-BARCODE_CREATE = "10100"
-BARCODE_INCREMENT = "10101"
-BARCODE_DECREMENT = "10102"
+#GROCY_DEFAULT_LOCATION_ID = 10110
+GROCY_DEFAULT_QUANTITY_UNIT = "2"
+
+#LOCATION_RANGE = (10110, 10120) # Grocy UserData Field attaching barcode to stock location
+
 BARCODE_API_URL = "http://10.8.0.55:5555"
-
-barcode_api_sources = ["off","usda","uhtt"]
+#barcode_api_sources = ["off","usda","uhtt"]
 
 opcodes = {
-    "create":BARCODE_CREATE,
-    "add":BARCODE_INCREMENT,
-    "consume":BARCODE_DECREMENT
+    "create":10100,
+    "add":10101,
+    "consume":10102
     }
 
 endpoint_prefixes = {
@@ -41,15 +40,43 @@ class InputHandler():
     active_opcode  = "add"
     scanned_code = ""
     scanned_name = ""
+    locations = []
+    DEFAULT_LOCATION = {}
+    SELECTED_LOCATION = None
+
+    def prepare_locations():
+        head = {}
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
+        r_data = json.loads(r.text)
+        InputHandler.locations = []
+        for i in r_data:
+            if "default" in i["description"].lower() and not InputHandler.SELECTED_LOCATION:
+                InputHandler.DEFAULT_LOCATION = {"id":i["id"], "barcode":i["userfields"]["barcode"]}
+                print(f"Default location found: {InputHandler.DEFAULT_LOCATION}")
+            if i["userfields"]:
+                InputHandler.locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
+#         print(f'Locations list built: {InputHandler.locations}')
 
     def process_scan(scanned_code):
-        if scanned_code in list(opcodes.values()):
+        InputHandler.prepare_locations()
+        location_codes = []
+#        print(list(opcodes.values()))
+        for i in InputHandler.locations:
+            location_codes.append(i["barcode"])     
+        print(location_codes)
+        if int(scanned_code) in list(opcodes.values()):
             for k in opcodes.items():
-                if k[1] == scanned_code:
+                if k[1] == int(scanned_code):
                     InputHandler.active_opcode = k[0]
-                    print(f"OPCODE DETECTED: {InputHandler.active_opcode}")
+                    print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+        elif scanned_code in location_codes:
+            for i in InputHandler.locations:
+                if i["barcode"] == scanned_code:
+                    InputHandler.SELECTED_LOCATION = i
+                    print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
         else:
-            print(f"BARCODE SCANNED: {scanned_code}")
+            print(f"BARCODE SCANNED: {scanned_code}.")
             InputHandler.build_api_url(scanned_code)
 
     def build_api_url(scanned_code):
@@ -119,7 +146,10 @@ class InputHandler():
             req = {}
             req["name"] = InputHandler.scanned_name
             req["barcode"] = InputHandler.scanned_code
-            req["location_id"] = GROCY_DEFAULT_LOCATION_ID
+            if InputHandler.SELECTED_LOCATION:
+                req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
+            else:
+                req["location_id"] = DEFAULT_LOCATION
             req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
             req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
             req["qu_factor_purchase_to_stock"] = "1.0"
