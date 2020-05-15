@@ -149,7 +149,7 @@ class InputHandler():
             if InputHandler.SELECTED_LOCATION:
                 req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
             else:
-                req["location_id"] = DEFAULT_LOCATION
+                req["location_id"] = InputHandler.DEFAULT_LOCATION
             req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
             req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
             req["qu_factor_purchase_to_stock"] = "1.0"
