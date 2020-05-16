@@ -52,7 +52,7 @@ class InputHandler():
     SELECTED_LOCATION = None
 
     def speak_result(result):
-        subprocess.call(["/home/ywr/speak_result", f"\'{result}\'"])
+        subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
