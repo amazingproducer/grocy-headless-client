@@ -5,6 +5,7 @@ import requests
 import json
 import os
 from pathlib import Path
+import subprocess
 
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
@@ -17,6 +18,11 @@ GROCY_DEFAULT_QUANTITY_UNIT = "2"
 
 BARCODE_API_URL = "http://10.8.0.55:5555"
 #barcode_api_sources = ["off","usda","uhtt"]
+
+speech = {
+    "destination":"seiryuu",
+    "speech_app":"espeak-ng"
+}
 
 opcodes = {
     "create":10100,
@@ -44,6 +50,9 @@ class InputHandler():
     locations = []
     DEFAULT_LOCATION = {}
     SELECTED_LOCATION = None
+
+    def speak_result(result)
+        subprocess.call(["ssh", "-t", speech["destination"], f"'{speech[speech_app]} {result}''"])
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
@@ -116,6 +125,7 @@ class InputHandler():
         if "id" in r_dict.keys():
             InputHandler.get_product_info(InputHandler.scanned_code)
             print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+            InputHandler.speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
         elif "error_message" in r_dict.keys():
             if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
                 print("Barcode not found in inventory; attempting to lookup product info via barcode.")
