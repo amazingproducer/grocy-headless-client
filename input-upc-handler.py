@@ -40,9 +40,17 @@ class InputHandler():
     active_opcode  = "add"
     scanned_code = ""
     scanned_name = ""
+    scanned_product = {}
     locations = []
     DEFAULT_LOCATION = {}
     SELECTED_LOCATION = None
+
+    def get_product_info(barcode):
+        head = {}
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}')
+        r_data = json.loads(r.text)
+        InputHandler.scanned_product = r_data
 
     def prepare_locations():
         head = {}
@@ -104,7 +112,8 @@ class InputHandler():
         print(f"API request: {r.request}")
         print(f"API response: {r.text}")
         if "id" in r_dict.keys():
-            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_name} succeeded.") # TODO make this better
+            InputHandler.get_product_info(InputHandler.scanned_code)
+            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product["name"]} succeeded.") # TODO make this better
         elif "error_message" in r_dict.keys():
             if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
                 print("Barcode not found in inventory; attempting to lookup product info via barcode.")
