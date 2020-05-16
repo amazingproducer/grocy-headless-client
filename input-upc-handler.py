@@ -46,11 +46,13 @@ class InputHandler():
     SELECTED_LOCATION = None
 
     def get_product_info(barcode):
+        print(f"Getting product info for {barcode}")
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}')
         r_data = json.loads(r.text)
         InputHandler.scanned_product = r_data
+        print(r_data)
 
     def prepare_locations():
         head = {}
