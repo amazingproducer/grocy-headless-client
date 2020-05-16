@@ -43,7 +43,7 @@ endpoint_suffixes = {
 }
 
 class InputHandler():
-    active_opcode  = "add"
+    active_opcode  = "consume"
     scanned_code = ""
     scanned_name = ""
     scanned_product = {}
