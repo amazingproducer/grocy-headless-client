@@ -122,7 +122,7 @@ class InputHandler():
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
         req["amount"] = 1
-        req["best_before_date"] = datetime.strftime(dt.now() + td(36500))
+        req["best_before_date"] = dt.strftime(dt.now() + td(36500))
         print("Adding impossibly distant best-before date...")
         req["transaction_type"] = InputHandler.active_opcode
         d = json.dumps(req)
