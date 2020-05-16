@@ -49,7 +49,7 @@ class InputHandler():
         print(f"Getting product info for {barcode}")
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}')
+        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
         r_data = json.loads(r.text)
         InputHandler.scanned_product = r_data
         print(r_data)
