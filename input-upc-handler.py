@@ -89,11 +89,13 @@ class InputHandler():
                 if k[1] == int(scanned_code):
                     InputHandler.active_opcode = k[0]
                     print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                    InputHandler.speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
         elif scanned_code in location_codes:
             for i in InputHandler.locations:
                 if i["barcode"] == scanned_code:
                     InputHandler.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
+                    InputHandler.speak_result(f"LOCATION CODE DETECTED.")
         else:
             print(f"BARCODE SCANNED: {scanned_code}.")
             InputHandler.build_api_url(scanned_code)
