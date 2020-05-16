@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import datetime
 
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
@@ -18,6 +19,9 @@ GROCY_DEFAULT_QUANTITY_UNIT = "2"
 
 BARCODE_API_URL = "http://10.8.0.55:5555"
 #barcode_api_sources = ["off","usda","uhtt"]
+
+dt = datetime.datetime()
+td = datetime.timedelta()
 
 speech = {
     "destination":"seiryuu",
@@ -118,6 +122,8 @@ class InputHandler():
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
         req["amount"] = 1
+        req["best_before_date"] = dt(now) + td("36500")
+        print("Adding impossibly distant best-before date...")
         req["transaction_type"] = InputHandler.active_opcode
         d = json.dumps(req)
         r = requests.post(url, data=d, headers=head)
