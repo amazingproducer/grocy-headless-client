@@ -113,7 +113,7 @@ class InputHandler():
         print(f"API response: {r.text}")
         if "id" in r_dict.keys():
             InputHandler.get_product_info(InputHandler.scanned_code)
-            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product["name"]} succeeded.") # TODO make this better
+            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
         elif "error_message" in r_dict.keys():
             if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
                 print("Barcode not found in inventory; attempting to lookup product info via barcode.")
