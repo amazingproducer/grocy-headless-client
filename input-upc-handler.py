@@ -51,7 +51,7 @@ class InputHandler():
     DEFAULT_LOCATION = {}
     SELECTED_LOCATION = None
 
-    def speak_result(result)
+    def speak_result(result):
         subprocess.call(["ssh", "-t", speech["destination"], f"'{speech[speech_app]} {result}''"])
 
     def get_product_info(barcode):
