@@ -19,11 +19,6 @@ GROCY_DEFAULT_QUANTITY_UNIT = "2"
 BARCODE_API_URL = "http://10.8.0.55:5555"
 #barcode_api_sources = ["off","usda","uhtt"]
 
-speech = {
-    "destination":"seiryuu",
-    "speech_app":"espeak-ng"
-}
-
 opcodes = {
     "create":10100,
     "add":10101,
@@ -50,9 +45,14 @@ class InputHandler():
     locations = []
     DEFAULT_LOCATION = {}
     SELECTED_LOCATION = None
+    speech = {
+        "destination":"seiryuu",
+        "speech_app":"espeak-ng"
+    }
+
 
     def speak_result(result):
-        subprocess.call(["ssh", "-t", speech["destination"], f"'{speech[speech_app]} {result}''"])
+        subprocess.call(["ssh", "-t", InputHandler.speech["destination"], f"'{InputHandler.speech[speech_app]} {result}''"])
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
