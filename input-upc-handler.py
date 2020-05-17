@@ -145,8 +145,10 @@ class InputHandler():
                     InputHandler.active_opcode = prev_opcode
                     InputHandler.build_inventory_request(url)
                 else:
+                    print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
                     InputHandler.active_opcode = prev_opcode
-                    print("Barcode not found in any dataset; ignoring.")
+                    InputHandler.scanned_name = InputHandler.scanned_code
+                    InputHandler.build_inventory_request(url)
             else:
                 print(r_dict["error_message"])
 
@@ -223,9 +225,12 @@ class InputHandler():
                         scan_buffer.append(k)
                     else:
                         scanned_code = "".join(scan_buffer)
-                        InputHandler.scanned_code = scanned_code
                         scan_buffer = []
-                        InputHandler.process_scan(scanned_code)
+                        if scanned_code.isnumeric():
+                            InputHandler.scanned_code = scanned_code
+                            InputHandler.process_scan(scanned_code)
+                        else:
+                            print("Non-numeric barcode scanned. This is not a UPC.")
 
 #debug laziness
 #InputHandler.scanned_code = "070470290614" # comment this debug laziness
