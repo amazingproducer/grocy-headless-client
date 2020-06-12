@@ -154,29 +154,25 @@ class InputHandler():
 
 
     def build_create_request(url):
-        r_url = f"{BARCODE_API_URL}/lookup/{InputHandler.scanned_code}"
+        r_url = f"{BARCODE_API_URL}/grocy/{InputHandler.scanned_code}"
         print(f"Sending upc request to {r_url}...")
         r = requests.get(r_url)
  #       print(f"response: {r.text}")
         r_dict = json.loads(r.text)
 #        print(r_dict)
-        found = False
         for i in r_dict["results"]:
-            if ("error" not in i["result"]) and (not found):
-                found = True
-                InputHandler.scanned_name = i["result"]["product_name"]
-                print(f'JSON Parsed Name: {i["result"]["product_name"]}')
-        if not found:
-            InputHandler.scanned_name = ""
+        if "error" in r_dict.keys():
+            r_dict["product_name"] = InputHandler.scanned_code
+            del r_dict["error"]
             print(f"No info found on scanned code: {InputHandler.scanned_code}")
         else:
             print("building request to create item...")
             head = {}
             head["content-type"] = "application/json"
             head["GROCY-API-KEY"] = GROCY_API_KEY
-            req = {}
-            req["name"] = InputHandler.scanned_name
-            req["barcode"] = InputHandler.scanned_code
+            req = r_dict
+#            req["name"] = InputHandler.scanned_name
+#            req["barcode"] = InputHandler.scanned_code
             if InputHandler.SELECTED_LOCATION:
                 req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
             else:
