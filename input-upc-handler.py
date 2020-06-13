@@ -190,7 +190,7 @@ class InputHandler():
                     InputHandler.scanned_name = InputHandler.scanned_code
                     InputHandler.build_create_request(endpoint_prefixes["create"])
                     InputHandler.active_opcode = prev_opcode
-                    InputHandler.build_inventory_request(endpoint_prefixes[prev_opcode])
+                    InputHandler.build_inventory_request(f"{endpoint_prefixes[active_opcode]}{scanned_code}{endpoint_suffixes[active_opcode]}")
             else:
                 print(r_dict["error_message"])
                 InputHandler.audible_playback("error_no_item_remaining") #TODO designate a general error tone
