@@ -189,7 +189,7 @@ class InputHandler():
  #       print(f"response: {r.text}")
         r_dict = json.loads(r.text)
 #        print(r_dict)
-        for i in r_dict["results"]:
+#        for i in r_dict["results"]:
         if "error" in r_dict.keys():
             r_dict["product_name"] = InputHandler.scanned_code
             del r_dict["error"]
