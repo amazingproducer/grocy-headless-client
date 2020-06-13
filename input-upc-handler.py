@@ -25,7 +25,13 @@ dt = datetime.datetime
 td = datetime.timedelta
 
 do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
- 
+remote_speaker = True # Set to false for onboard playback
+
+speaker = {
+    "destination":"seiryuu",
+    "speaker_app":"aplay"
+}
+
 speech = {
     "destination":"seiryuu",
     "speech_app":"espeak-ng"
@@ -75,9 +81,12 @@ class InputHandler():
         subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
 
     def audible_playback(status):
-        audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
-        playback_object = audible_object.play()
-        playback_object.wait_done()
+        if remote_speaker:
+            subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"'])
+        else:
+            audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
+            playback_object = audible_object.play()
+            playback_object.wait_done()
 
 
     def get_product_info(barcode):
