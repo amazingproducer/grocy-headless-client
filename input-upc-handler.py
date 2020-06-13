@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import datetime
-from playsound import playsound
+import simpleaudio as sa
 
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
@@ -75,7 +75,10 @@ class InputHandler():
         subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
 
     def audible_playback(status):
-        playsound(feedback_tones[status])
+        audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
+        playback_object = audible_object.play()
+        playback_object.wait_done()
+
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
