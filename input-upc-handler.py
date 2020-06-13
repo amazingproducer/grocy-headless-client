@@ -75,7 +75,7 @@ class InputHandler():
         subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
 
     def audible_playback(status):
-        playsound(feedback_tones[status], False)
+        playsound(feedback_tones[status])
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
