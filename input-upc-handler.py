@@ -186,11 +186,13 @@ class InputHandler():
                     InputHandler.active_opcode = prev_opcode
                     InputHandler.build_inventory_request(url)
                 else:
-                    print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
-                    InputHandler.scanned_name = InputHandler.scanned_code
-                    InputHandler.build_create_request(endpoint_prefixes["create"])
-                    InputHandler.active_opcode = prev_opcode
-                    InputHandler.build_inventory_request(f"{endpoint_prefixes[InputHandler.active_opcode]}{InputHandler.scanned_code}{endpoint_suffixes[InputHandler.active_opcode]}")
+                    print("error: no scanned name found.")
+                    InputHandler.audible_playback("error_no_item_remaining")
+                    # print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
+                    # InputHandler.scanned_name = InputHandler.scanned_code
+                    # InputHandler.build_create_request(endpoint_prefixes["create"])
+                    # InputHandler.active_opcode = prev_opcode
+                    # InputHandler.build_inventory_request(f"{endpoint_prefixes[InputHandler.active_opcode]}{InputHandler.scanned_code}{endpoint_suffixes[InputHandler.active_opcode]}")
             else:
                 print(r_dict["error_message"])
                 InputHandler.audible_playback("error_no_item_remaining") #TODO designate a general error tone
@@ -204,20 +206,21 @@ class InputHandler():
         r_dict = json.loads(r.text)
 #        print(r_dict)
 #        for i in r_dict["results"]:
-        lookup_error = False
+        InputHandler.lookup_error = False
         if "error" in r_dict.keys():
             r_dict["product_name"] = InputHandler.scanned_code
             del r_dict["error"]
             print(f"No info found on scanned code: {InputHandler.scanned_code}")
-            lookup_error = True
+            InputHandler.lookup_error = True
         else:
             print("building request to create item...")
             head = {}
             head["content-type"] = "application/json"
             head["GROCY-API-KEY"] = GROCY_API_KEY
             req = r_dict
-#            req["name"] = InputHandler.scanned_name
-#            req["barcode"] = InputHandler.scanned_code
+            if InputHandler.lookup_error:
+                req["name"] = InputHandler.scanned_name
+                req["barcode"] = InputHandler.scanned_code
             if InputHandler.SELECTED_LOCATION:
                 req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
             else:
