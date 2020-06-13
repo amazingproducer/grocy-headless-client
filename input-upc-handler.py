@@ -186,9 +186,8 @@ class InputHandler():
                     InputHandler.build_inventory_request(url)
                 else:
                     print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
-                    InputHandler.active_opcode = prev_opcode
                     InputHandler.scanned_name = InputHandler.scanned_code
-                    InputHandler.build_create_request(url)
+                    InputHandler.build_create_request(endpoint_prefixes[active_opcode])
             else:
                 print(r_dict["error_message"])
                 InputHandler.audible_playback("error_no_item_remaining") #TODO designate a general error tone
@@ -202,10 +201,12 @@ class InputHandler():
         r_dict = json.loads(r.text)
 #        print(r_dict)
 #        for i in r_dict["results"]:
+        lookup_error = False
         if "error" in r_dict.keys():
             r_dict["product_name"] = InputHandler.scanned_code
             del r_dict["error"]
             print(f"No info found on scanned code: {InputHandler.scanned_code}")
+            lookup_error = True
         else:
             print("building request to create item...")
             head = {}
