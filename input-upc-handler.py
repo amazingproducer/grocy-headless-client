@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import datetime
+from playsound import playsound
 
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
@@ -23,9 +24,24 @@ BARCODE_API_URL = "http://10.8.0.55:5555"
 dt = datetime.datetime
 td = datetime.timedelta
 
+do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
+ 
 speech = {
     "destination":"seiryuu",
     "speech_app":"espeak-ng"
+}
+
+feedback_tones = {
+    "add":"./wav/add.wav",
+    "consume":"./wav/consume.wav",
+    "spoiled":"./wav/spoiled.wav",
+    "create":"./wav/create.wav",
+    "transfer":"./wav/transfer.wav",
+    "error_no_item_remaining":"./wav/error_no.item.remaining.wav",
+    "error_item_exists":"./wav/error_item.exists.wav",
+    "timer_location_reset":"./wav/timer_location.reset.wav",
+    "timer_opcode_reset":"./wav/timer_opcode.reset.wav",
+    "timer_transfer_reset":"./wav/timer_transfer.reset.wav"
 }
 
 opcodes = {
@@ -57,6 +73,9 @@ class InputHandler():
 
     def speak_result(result):
         subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
+
+    def audible_playback(status):
+        playsound(feedback_tones[status], False)
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
@@ -93,13 +112,19 @@ class InputHandler():
                 if k[1] == int(scanned_code):
                     InputHandler.active_opcode = k[0]
                     print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
-                    InputHandler.speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                    if do_speak:
+                        InputHandler.speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                    else:
+                        InputHandler.audible_playback(InputHandler.active_opcode)
         elif scanned_code in location_codes:
             for i in InputHandler.locations:
                 if i["barcode"] == scanned_code:
                     InputHandler.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
-                    InputHandler.speak_result(f"LOCATION CODE DETECTED.")
+                    if do_speak:
+                        InputHandler.speak_result(f"LOCATION CODE DETECTED.")
+                    else:
+                        InputHandler.audible_playback("transfer") #TODO add a location code sound?
         else:
             print(f"BARCODE SCANNED: {scanned_code}.")
             InputHandler.build_api_url(scanned_code)
@@ -133,7 +158,10 @@ class InputHandler():
         if "id" in r_dict.keys():
             InputHandler.get_product_info(InputHandler.scanned_code)
             print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
-            InputHandler.speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+            if do_speak:
+                InputHandler.speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+            else:
+                InputHandler.audible_playback(InputHandler.active_opcode)
         elif "error_message" in r_dict.keys():
             if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
                 print("Barcode not found in inventory; attempting to lookup product info via barcode.")
@@ -151,6 +179,7 @@ class InputHandler():
                     InputHandler.build_inventory_request(url)
             else:
                 print(r_dict["error_message"])
+                InputHandler.audible_playback("error_no_item_remaining") #TODO designate a general error tone
 
 
     def build_create_request(url):
