@@ -175,6 +175,7 @@ class InputHandler():
             else:
                 InputHandler.audible_playback(InputHandler.active_opcode)
         elif "error_message" in r_dict.keys():
+            InputHandler.scanned_name = None
             if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
                 print("Barcode not found in inventory; attempting to lookup product info via barcode.")
                 prev_opcode = InputHandler.active_opcode
