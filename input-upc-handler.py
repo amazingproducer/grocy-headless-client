@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#:q:/usr/bin/env python3.8
 
 import evdev
 import requests
@@ -117,7 +117,7 @@ class InputHandler():
         location_codes = []
 #        print(list(opcodes.values()))
         for i in InputHandler.locations:
-            location_codes.append(i["barcode"])     
+            location_codes.append(i["barcode"])
         print(location_codes)
         if int(scanned_code) in list(opcodes.values()):
             for k in opcodes.items():
