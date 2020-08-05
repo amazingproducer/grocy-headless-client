@@ -1,33 +1,40 @@
 # grocy-input-upc-handler
 
-Grocy API handler for USB HID based barcode scanners.
+USB HID based barcode scanner-driven grocy API client.
 
-USB BARCODE SCANNER INTEGRATION, GROCY
+## At all times, the app must know:
 
-Issues:
-Barcode scanner is a keyboard
-  Scanned data is pushed into current x session
-    remove with xinput
-      xinput list
-      xinput set-prop 10 "Device Enabled" 0
-      xinput float 10
-    python evdev's "grab" can gain exclusive access to keyboard
+- Active Opcode
+- Active Location
+- Grocy API path
+- UPC API path
 
-  Input device capture requires elevated permissions
-    grant permission to regular users:
-      lsusb (to get vendor/product IDs)
-      add udev rule as /lib/udev/rules.d/90-usb-barcode-scanner.rules
-        SUBSYSTEM=="input", ATTRS{idVendor}=="05e0", ATTRS{idProduct}=="1200" MODE="0644"
+## TWO TYPES OF REQUEST
+- Inventory Request (CREATE Opcode): builds an inventory item for future stock requests
+- Stock Request (ADD/CONSUME/TRANSFER/OPEN Opcodes): adds, modifies, or deletes single stock units for a given inventory item
 
-Barcodes provide context for multiple Grocy actions
-  Hardware button on scanner provides no sniffable input
+## FLOW
 
-  Perhaps a barcode could be scanned to set the grocy context
+### DETERMINE BARCODE TYPE:
 
-    scan to input product into system
-  
-    scan to increment inventory quantity of product
+- Acquire barcode string
 
-    scan to decrement inventory quantity of product
+- If barcode string is within opcode list, set opcode and restart
 
+- Else if barcode string is within location list, set location and restart
 
+- Else if barcode string is shorter than 12, reject string and restart
+
+- Else barcode string is for a product
+
+### BUILD REQUESTS FROM BARCODE
+
+- If barcode does not exist in Grocy DB, make UPC lookup API request for product name
+
+  - If UPC lookup returns a product name, build inventory request using the product name
+
+  - Else, build inventory request using the barcode as the product name
+
+- Build stock request via barcode
+
+### Restarting to initial state includes resetting the Opcode and Location Decay timers
