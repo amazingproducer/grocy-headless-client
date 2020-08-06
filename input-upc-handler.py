@@ -68,26 +68,27 @@ endpoint_suffixes = {
     "consume":"/consume"
 }
 
-class InputHandler():
-    active_opcode  = "consume"
-    scanned_code = ""
-    scanned_name = ""
-    scanned_product = {}
-    locations = []
-    DEFAULT_LOCATION = {}
-    SELECTED_LOCATION = None
+def speak_result(result):
+    subprocess.call(["/home/ywr/speak_result", f'\"{result}\"']) #Abstract this call out or something
 
-    def speak_result(result):
-        subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
+def audible_playback(status):
+    if remote_speaker:
+        subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"']) #Abstract this call out or something
+    else:
+        audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
+        playback_object = audible_object.play()
+        playback_object.wait_done()
 
-    def audible_playback(status):
-        if remote_speaker:
-            subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"'])
-        else:
-            audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
-            playback_object = audible_object.play()
-            playback_object.wait_done()
 
+class InputHandler:
+    def __init__(self):
+        active_opcode  = "consume"
+        scanned_code = ""
+        scanned_name = ""
+        scanned_product = {}
+        locations = []
+        DEFAULT_LOCATION = {}
+        SELECTED_LOCATION = None
 
     def get_product_info(barcode):
         print(f"Getting product info for {barcode}")
@@ -125,18 +126,18 @@ class InputHandler():
                     InputHandler.active_opcode = k[0]
                     print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     if do_speak:
-                        InputHandler.speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                        speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     else:
-                        InputHandler.audible_playback(InputHandler.active_opcode)
+                        audible_playback(InputHandler.active_opcode)
         elif scanned_code in location_codes:
             for i in InputHandler.locations:
                 if i["barcode"] == scanned_code:
                     InputHandler.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
                     if do_speak:
-                        InputHandler.speak_result(f"LOCATION CODE DETECTED.")
+                        speak_result(f"LOCATION CODE DETECTED.")
                     else:
-                        InputHandler.audible_playback("transfer") #TODO add a location code sound?
+                        audible_playback("transfer") #TODO add a location code sound?
         else:
             print(f"BARCODE SCANNED: {scanned_code}.")
             InputHandler.build_api_url(scanned_code)
@@ -171,9 +172,9 @@ class InputHandler():
             InputHandler.get_product_info(InputHandler.scanned_code)
             print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
             if do_speak:
-                InputHandler.speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+                speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
             else:
-                InputHandler.audible_playback(InputHandler.active_opcode)
+                audible_playback(InputHandler.active_opcode)
         elif "error_message" in r_dict.keys():
             InputHandler.scanned_name = None
             if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
@@ -187,7 +188,7 @@ class InputHandler():
                     InputHandler.build_inventory_request(url)
                 else:
                     print("error: no scanned name found.")
-                    InputHandler.audible_playback("error_no_item_remaining")
+                    audible_playback("error_no_item_remaining")
                     # print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
                     # InputHandler.scanned_name = InputHandler.scanned_code
                     # InputHandler.build_create_request(endpoint_prefixes["create"])
@@ -195,7 +196,7 @@ class InputHandler():
                     # InputHandler.build_inventory_request(f"{endpoint_prefixes[InputHandler.active_opcode]}{InputHandler.scanned_code}{endpoint_suffixes[InputHandler.active_opcode]}")
             else:
                 print(r_dict["error_message"])
-                InputHandler.audible_playback("error_no_item_remaining") #TODO designate a general error tone
+                audible_playback("error_no_item_remaining") #TODO designate a general error tone
 
 
     def build_create_request(url):
