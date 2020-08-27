@@ -30,6 +30,9 @@ USB HID based barcode scanner-driven grocy API client.
   - If UPC lookup returns a product name, build inventory request using the product name
   - Else, build inventory request using the barcode as the product name
 - Build stock request via barcode
+  - Prepare fields for stock entry:
+    - Storability
+    - Location
 
 ### MAKE BUILT REQUESTS AND HANDLE ERRORS
 - Make inventory request, if exists
