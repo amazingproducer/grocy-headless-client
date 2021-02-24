@@ -70,7 +70,6 @@ endpoint_suffixes = {
 
 ## TODO: add headless setup dialog for mapping stock locations to custom barcodes
 storage_locations_codes = [] # First entry will be used as the default
-#storage_location_codes = [] # This is dumb
 
 def speak_result(result):
     """Use TTS for audible feedback."""
@@ -123,12 +122,14 @@ def prepare_storage_locations():
             print(f"No barcode set for storage location: {i["name"]}")
         elif i["description"]:
             # Use a default location if one is declared within grocy
-            if "default" in i["description"].lower()
+            if "default" in i["description"].lower():
+                # Jump to conclusions and prepend this entry to storage locations as the default
                 storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + storage_locations
             else:
                 storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
     for i in storage_locations: # This is dumb
         storage_location_codes.append(i["barcode"])
+    return storage_location_codes
     print(f"Storage locations prepared: {len(storage_location_codes)}")
 
     def process_scan(scanned_code):
@@ -139,6 +140,7 @@ def prepare_storage_locations():
 #        for i in InputHandler.locations:
 #            location_codes.append(i["barcode"])
 #        print(location_codes)
+        prepare_locations()
         if int(scanned_code) in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == int(scanned_code):
