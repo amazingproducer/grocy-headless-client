@@ -68,10 +68,16 @@ endpoint_suffixes = {
     "consume":"/consume"
 }
 
+## TODO: add headless setup dialog for mapping stock locations to custom barcodes
+storage_locations_codes = [] # First entry will be used as the default
+#storage_location_codes = [] # This is dumb
+
 def speak_result(result):
+    """Use TTS for audible feedback."""
     subprocess.call(["/home/ywr/speak_result", f'\"{result}\"']) #Abstract this call out or something
 
 def audible_playback(status):
+    """Use wav files for audible feedback."""
     if remote_speaker:
         subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"']) #Abstract this call out or something
     else:
@@ -79,47 +85,60 @@ def audible_playback(status):
         playback_object = audible_object.play()
         playback_object.wait_done()
 
+# I'm not sure I need to make a whole class for this
 
-class InputHandler:
-    def __init__(self):
-        active_opcode  = "consume"
-        scanned_code = ""
-        scanned_name = ""
-        scanned_product = {}
-        locations = []
-        DEFAULT_LOCATION = {}
-        SELECTED_LOCATION = None
+# class InputHandler:
+#     def __init__(self):
+#         active_opcode  = "consume"
+#         scanned_code = ""
+#         scanned_name = ""
+#         scanned_product = {}
+#         locations = []
+#         DEFAULT_LOCATION = {}
+#         SELECTED_LOCATION = None
 
-    def get_product_info(barcode):
-        print(f"Getting product info for {barcode}")
-        head = {}
-        head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
-        r_data = json.loads(r.text)
-        InputHandler.scanned_product = r_data["product"]
-        print(r_data)
+def get_product_info(barcode):
+    """Get info from grocy about a scanned barcode."""
+    print(f"Getting product info for {barcode}")
+    head = {}
+    head["GROCY-API-KEY"] = GROCY_API_KEY
+    r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
+    r_data = json.loads(r.text)
+#    InputHandler.scanned_product = r_data["product"]
+    if r.status_code == "404":
+        return None
+    return r_data["product"]["name"]
 
-    def prepare_locations():
-        head = {}
-        head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
-        r_data = json.loads(r.text)
-        InputHandler.locations = []
-        for i in r_data:
-            if "default" in i["description"].lower() and not InputHandler.SELECTED_LOCATION:
-                InputHandler.DEFAULT_LOCATION = {"id":i["id"], "barcode":i["userfields"]["barcode"]}
-                print(f"Default location found: {InputHandler.DEFAULT_LOCATION}")
-            if i["userfields"]:
-                InputHandler.locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
-#         print(f'Locations list built: {InputHandler.locations}')
+def prepare_storage_locations():
+    """Attempt to map location barcodes to locations known by grocy."""
+    storage_locations = []
+    head = {}
+    head["GROCY-API-KEY"] = GROCY_API_KEY
+    r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
+    r_data = json.loads(r.text)
+#    InputHandler.locations = []
+    for i in r_data:
+        # Ignore location if barcode userfield is not present
+        if not i["userfields"]["barcode"]:
+            print(f"No barcode set for storage location: {i["name"]}")
+        elif i["description"]:
+            # Use a default location if one is declared within grocy
+            if "default" in i["description"].lower()
+                storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + storage_locations
+            else:
+                storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
+    for i in storage_locations: # This is dumb
+        storage_location_codes.append(i["barcode"])
+    print(f"Storage locations prepared: {len(storage_location_codes)}")
 
     def process_scan(scanned_code):
-        InputHandler.prepare_locations()
-        location_codes = []
+        """Determine if the scanned code was an opcode or a UPC and respond accordingly."""
+#        InputHandler.prepare_locations()
+#        location_codes = []
 #        print(list(opcodes.values()))
-        for i in InputHandler.locations:
-            location_codes.append(i["barcode"])
-        print(location_codes)
+#        for i in InputHandler.locations:
+#            location_codes.append(i["barcode"])
+#        print(location_codes)
         if int(scanned_code) in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == int(scanned_code):
@@ -129,7 +148,7 @@ class InputHandler:
                         speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     else:
                         audible_playback(InputHandler.active_opcode)
-        elif scanned_code in location_codes:
+        elif scanned_code in InputHandler.location_codes:
             for i in InputHandler.locations:
                 if i["barcode"] == scanned_code:
                     InputHandler.SELECTED_LOCATION = i
@@ -142,7 +161,8 @@ class InputHandler:
             print(f"BARCODE SCANNED: {scanned_code}.")
             InputHandler.build_api_url(scanned_code)
 
-    def build_api_url(scanned_code):
+# TODO get rid of the create opcode and get rid of this
+    def build_api_url(scanned_code): # This function only exists to support a near-useless feature -- scanning a new item into inventory with no intention of adding any stock.
         active_opcode = InputHandler.active_opcode
         if active_opcode != "create":
             print(f"API URL: {endpoint_prefixes[active_opcode]}{scanned_code}{endpoint_suffixes[active_opcode]}")
@@ -153,7 +173,7 @@ class InputHandler:
             print("JSON request data required.")
             InputHandler.build_create_request(endpoint_prefixes[active_opcode])
 
-    def build_inventory_request(url):
+    def build_inventory_request(url): # this is ugly and needs work
         prev_opcode = ""
         head = {}
         head["content-type"] = "application/json"
