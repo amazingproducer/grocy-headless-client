@@ -20,7 +20,7 @@ GROCY_API_KEY = os.environ["GROCY_API_KEY"]
 GROCY_DEFAULT_QUANTITY_UNIT = "1"
 GROCY_DEFAULT_QUANTITY_FACTOR = "1.0"
 GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
-CODE_SELECTION_LIFETIME = 600000 # Time to reset selections of opcodes and locations to default, in ms
+CODE_SELECTION_LIFETIME = td(minutes=10)
 BARCODE_API_URL = "http://10.8.0.55:5555"
 do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
 remote_speaker = True # Set to false for onboard playback
