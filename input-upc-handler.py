@@ -81,7 +81,7 @@ def audible_playback(status):
         playback_object = audible_object.play()
         playback_object.wait_done()
 
-class ScannedCode:
+class ScannedCode: # methods which gather information to turn a scanned barcode into a complete object for GrocyClient
     def __init__(self, code):
     self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
     self.scanned_code = code
@@ -126,8 +126,14 @@ class ScannedCode:
         else:
             print(r.status_code, type(r.status_code))
 
+
+class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock objects
+    def __init__(self, code):
+        super().__init__(code)
+
     def prepare_storage_locations(self):
         """Attempt to map location barcodes to locations known by grocy."""
+        # Do i still need to empty these fields? I just initialized them
         self.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
         self.storage_location_codes = []
         head = {}
@@ -149,28 +155,27 @@ class ScannedCode:
         for i in self.storage_locations: # This doesn't save us much time to prebuild
             self.storage_location_codes.append(i["barcode"])
 
-class InputHandler:
-    def process_scan():
+    def process_scan(self):
         """Determine if the scanned code type and determine its corresponding name."""
         # Check timestamp of previous scan and reset opcodes and locations if required
-        scanned_code = InputHandler.scanned_code
-        if dt.now() - InputHandler.last_scan_time > CODE_SELECTION_LIFETIME:
-            InputHandler.DEFAULT_LOCATION = InputHandler.storage_location_codes[0]
-            InputHandler.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
-        InputHandler.last_scan_time = dt.now()
+        scanned_code = self.scanned_code
+        if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME:
+            self.DEFAULT_LOCATION = self.storage_location_codes[0]
+            self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+        self.last_scan_time = dt.now()
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
-                    InputHandler.active_opcode = k[0]
-                    print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                    self.active_opcode = k[0]
+                    print(f"OPCODE DETECTED: {self.active_opcode}.")
                     if do_speak:
-                        speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                        speak_result(f"OPCODE DETECTED: {self.active_opcode}.")
                     else:
-                        audible_playback(InputHandler.active_opcode)
-        elif scanned_code in InputHandler.storage_location_codes:
-            for i in InputHandler.storage_locations:
+                        audible_playback(self.active_opcode)
+        elif scanned_code in self.storage_location_codes:
+            for i in self.storage_locations:
                 if i["barcode"] == scanned_code:
-                    InputHandler.SELECTED_LOCATION = i
+                    self.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
                     if do_speak:
                         speak_result(f"LOCATION CODE DETECTED.")
@@ -178,46 +183,46 @@ class InputHandler:
                         audible_playback("transfer") #TODO add a location code sound?
         elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
-            InputHandler.scanned_name = InputHandler.get_product_info(scanned_code)
-            if not InputHandler.scanned_name:
-                InputHandler.scanned_name = InputHandler.get_barcode_info(scanned_code)
-            if not InputHandler.scanned_name:
-                InputHandler.scanned_name = "Unknown Product"
+            self.scanned_name = self.get_product_info(scanned_code)
+            if not self.scanned_name:
+                self.scanned_name = self.get_barcode_info(scanned_code)
+            if not self.scanned_name:
+                self.scanned_name = "Unknown Product"
                 print("creating new inventory item")
-                InputHandler.create_inventory_item()
+                self.create_inventory_item()
             print("adding one unit to stock of new inventory item")
-            InputHandler.modify_inventory_stock()
+            self.modify_inventory_stock()
         else:
             if do_speak:
                 speak_result("Invalid code scanned.")
             else:
                 audible_playback("error_item_exists") # TODO find more soundbytes for error types
 
-    def modify_inventory_stock():
+    def modify_inventory_stock(self):
         """Add or Consume grocy stock for the scanned product.""" 
-        url = endpoint_prefixes[InputHandler.active_opcode] + InputHandler.scanned_code + endpoint_suffixes[InputHandler.active_opcode]
+        url = endpoint_prefixes[self.active_opcode] + self.scanned_code + endpoint_suffixes[self.active_opcode]
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
         req["amount"] = 1
         req["best_before_date"] = (dt.now() + td(36500)).strftime("%Y-%m-%d") # Add impossibly-distant expiration date for future work
-        req["transaction_type"] = InputHandler.active_opcode
+        req["transaction_type"] = self.active_opcode
         r = requests.post(url, data=json.dumps(req), headers=head)
         if r.status_code == 200:
             if do_speak:
-                speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_name} succeeded.")
+                speak_result(f"Request to {self.active_opcode} {self.scanned_name} succeeded.")
             else:
-                audible_playback(InputHandler.active_opcode)
+                audible_playback(self.active_opcode)
         else: 
             print(f"modify_inventory_stock error: {r.status_code}, {url}")
         # elif "amount" in json.loads(r.text)["error_message"]:
             if do_speak:
-                speak_result(f"All stock of {InputHandler.scanned_name} has been consumed.")
+                speak_result(f"All stock of {self.scanned_name} has been consumed.")
             else:
                 audible_playback("error_no_item_remaining")
 
-    def create_inventory_item():
+    def create_inventory_item(self):
         """Create a new grocy inventory item for the scanned product."""
         url = endpoint_prefixes["create"]
         print(f"url: {url}")
@@ -225,12 +230,12 @@ class InputHandler:
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
-        req["name"] = InputHandler.scanned_code
-        req["barcode"] = InputHandler.scanned_code
-        if InputHandler.SELECTED_LOCATION:
-            req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
+        req["name"] = self.scanned_code
+        req["barcode"] = self.scanned_code
+        if self.SELECTED_LOCATION:
+            req["location_id"] = self.SELECTED_LOCATION["id"]
         else:
-            req["location_id"] = InputHandler.DEFAULT_LOCATION["id"]
+            req["location_id"] = self.DEFAULT_LOCATION["id"]
         req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
         req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
         req["qu_factor_purchase_to_stock"] = GROCY_DEFAULT_QUANTITY_FACTOR
@@ -244,6 +249,7 @@ class InputHandler:
             print(r.status_code, r.text)
             audible_playback("error_item_exists") # Maybe this result is not necessary
 
+class InputHandler: # methods to set up a USB HID barcode scanner and send its scans to ScannedCode
     def select_scanner():
         InputHandler.prepare_storage_locations()
         devices = []
@@ -277,8 +283,9 @@ class InputHandler:
                         scanned_code = "".join(scan_buffer)
                         scan_buffer = []
                         if scanned_code.isnumeric():
-                            InputHandler.scanned_code = scanned_code
-                            InputHandler.process_scan()
+                            ScannedCode(scanned_code)
+                            # InputHandler.scanned_code = scanned_code
+                            # InputHandler.process_scan()
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
                             if do_speak:
@@ -287,4 +294,3 @@ class InputHandler:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
 InputHandler.select_scanner()
-
