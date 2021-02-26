@@ -9,24 +9,18 @@ import subprocess
 import datetime
 import simpleaudio as sa
 
-INPUT_LISTENER = False
-GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
-GROCY_API_KEY = os.environ["GROCY_API_KEY"]
-
-# TODO move most of these messy declarations to configuration files or something
-
-
-#GROCY_DEFAULT_LOCATION_ID = 10110
-GROCY_DEFAULT_QUANTITY_UNIT = "2"
-
-#LOCATION_RANGE = (10110, 10120) # Grocy UserData Field attaching barcode to stock location
-
-BARCODE_API_URL = "http://10.8.0.55:5555"
-#barcode_api_sources = ["off","usda","uhtt"]
-
 dt = datetime.datetime
 td = datetime.timedelta
 
+# TODO move most of these messy declarations to configuration files or something
+
+INPUT_LISTENER = False
+GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
+GROCY_API_KEY = os.environ["GROCY_API_KEY"]
+GROCY_DEFAULT_QUANTITY_UNIT = "1"
+# Time to reset selections of opcodes and locations to default, in ms
+CODE_SELECTION_LIFETIME = 600000 
+BARCODE_API_URL = "http://10.8.0.55:5555" # TODO shove this into a config file
 do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
 remote_speaker = True # Set to false for onboard playback
 
@@ -54,12 +48,6 @@ feedback_tones = {
 }
 
 ## TODO: add headless setup dialog for mapping opcode values to custom barcodes
-# opcodes = {
-#     "create":"10100",
-#     "add":"10101",
-#     "consume":"10102"
-#     }
-# Let's remove support for explicitly using the create opcode
 opcodes = {
     "add":"10101",
     "consume":"10102"
@@ -92,16 +80,15 @@ def audible_playback(status):
         playback_object = audible_object.play()
         playback_object.wait_done()
 
-
 class InputHandler:
     def __init__(self):
-        active_opcode  = "consume"
         scanned_code = ""
         scanned_name = ""
         storage_locations = []
         storage_location_codes = []
         DEFAULT_LOCATION = {}
         SELECTED_LOCATION = {}
+        last_scan_time = dt.now()
         self.prepare_storage_locations()
 
     def get_product_info(barcode):
@@ -149,8 +136,11 @@ class InputHandler:
         for i in InputHandler.storage_locations: # This doesn't save us much time to prebuild
             InputHandler.storage_location_codes.append(i["barcode"])
 
-    def process_scan(scanned_code):
+    def process_scan():
         """Determine if the scanned code type and determine its corresponding name."""
+        # Check timestamp of previous scan and reset opcodes and locations if required
+        scanned_code = InputHandler.scanned_code
+        if dt.now() - InputHandler.last_scan_time > 600000:
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
@@ -182,21 +172,14 @@ class InputHandler:
                 create_inventory_item()
             # Call the grocy api to execute the proper command with this new information
             modify_inventory_stock()
-#            InputHandler.build_api_url(scanned_code)
-
-# TODO get rid of the create opcode and get rid of this
-    def build_api_url(scanned_code): # This function only exists to support a near-useless feature -- scanning a new item into inventory with no intention of adding any stock.
-        active_opcode = InputHandler.active_opcode
-        if active_opcode != "create":
-            print(f"API URL: {endpoint_prefixes[active_opcode]}{scanned_code}{endpoint_suffixes[active_opcode]}")
-            InputHandler.build_inventory_request(f"{endpoint_prefixes[active_opcode]}{scanned_code}{endpoint_suffixes[active_opcode]}")
         else:
-            print(f"API URL: {endpoint_prefixes[active_opcode]}")
-            request_url = f"{endpoint_prefixes[active_opcode]}"
-            print("JSON request data required.")
-            InputHandler.build_create_request(endpoint_prefixes[active_opcode])
+            if do_speak:
+                speak_result("Invalid code scanned.")
+            else:
+                audible_playback("error_item_exists") # TODO find more soundbytes for error types
 
     def modify_inventory_stock():
+        """Add or Consume grocy stock for the scanned product.""" 
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
@@ -217,6 +200,7 @@ class InputHandler:
                 audible_playback("error_no_item_remaining")
 
     def create_inventory_item():
+        """Create a new grocy inventory item for the scanned product."""
         url = endpoint_prefixes["create"]
         head = {}
         head["content-type"] = "application/json"
@@ -277,10 +261,5 @@ class InputHandler:
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
 
-#debug laziness
-#ih.scanned_code = "070470290614" # comment this debug laziness
-#ih.build_create_request(endpoint_prefixes["create"]) # comment this debug laziness
-
-#uncomment for normalcy
 ih = InputHandler()
 ih.select_scanner()
