@@ -18,9 +18,10 @@ INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
 GROCY_API_KEY = os.environ["GROCY_API_KEY"]
 GROCY_DEFAULT_QUANTITY_UNIT = "1"
-# Time to reset selections of opcodes and locations to default, in ms
-CODE_SELECTION_LIFETIME = 600000 
-BARCODE_API_URL = "http://10.8.0.55:5555" # TODO shove this into a config file
+GROCY_DEFAULT_QUANTITY_FACTOR = "1.0"
+GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
+CODE_SELECTION_LIFETIME = 600000 # Time to reset selections of opcodes and locations to default, in ms
+BARCODE_API_URL = "http://10.8.0.55:5555"
 do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
 remote_speaker = True # Set to false for onboard playback
 
@@ -82,6 +83,7 @@ def audible_playback(status):
 
 class InputHandler:
     def __init__(self):
+        active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
         scanned_code = ""
         scanned_name = ""
         storage_locations = []
@@ -140,7 +142,10 @@ class InputHandler:
         """Determine if the scanned code type and determine its corresponding name."""
         # Check timestamp of previous scan and reset opcodes and locations if required
         scanned_code = InputHandler.scanned_code
-        if dt.now() - InputHandler.last_scan_time > 600000:
+        if dt.now() - InputHandler.last_scan_time > CODE_SELECTION_LIFETIME:
+            InputHandler.DEFAULT_LOCATION = InputHandler.storage_location_codes[0]
+            InputHandler.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+        InputHandler.last_scan_time = dt.now()
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
@@ -161,16 +166,12 @@ class InputHandler:
                         audible_playback("transfer") #TODO add a location code sound?
         elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
-            # Search for the code vide grocy api
             InputHandler.scanned_name = get_product_info(scanned_code)
             if not InputHandler.scanned_name:
-                # Search for the code via barcode api
                 InputHandler.scanned_name = get_barcode_info(scanned_code)
             if not InputHandler.scanned_name:
                 InputHandler.scanned_name = "Unknown Product"
-                # Create new stock item via grocy api
                 create_inventory_item()
-            # Call the grocy api to execute the proper command with this new information
             modify_inventory_stock()
         else:
             if do_speak:
@@ -180,6 +181,7 @@ class InputHandler:
 
     def modify_inventory_stock():
         """Add or Consume grocy stock for the scanned product.""" 
+        url = endpoint_prefixes[InputHandler.active_opcode]
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
@@ -214,21 +216,22 @@ class InputHandler:
             req["location_id"] = InputHandler.DEFAULT_LOCATION["id"]
         req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
         req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
-        req["qu_factor_purchase_to_stock"] = "1.0"
+        req["qu_factor_purchase_to_stock"] = GROCY_DEFAULT_QUANTITY_FACTOR
         r = requests.post(url, data=json.dumps(req), headers=head)
         if r.status_code == "200":
-            audible_playback("create")
+            if do_speak:
+                speak_result("Creating new entry.")
+            else:
+                audible_playback("create")
         else:
             audible_playback("error_item_exists") # Maybe this result is not necessary
 
-    def select_scanner(): # this is ugly and bad and i should feel bad for writing it
+    def select_scanner():
         devices = []
         for i in range(20):
             if Path(f"/dev/input/event{str(i)}").exists():
                 devices.append(f"/dev/input/event{str(i)}")
-#        print(devices)
         for device in devices:
-#            print(evdev.InputDevice(device).name)
             faith = 0
             for i in ["bar", "code", "scanner"]:
                 if i in evdev.InputDevice(device).name.lower():
@@ -238,7 +241,6 @@ class InputHandler:
                 InputHandler.await_scan(device)
                 INPUT_LISTENER = device
                 break
-        print("No scanners found; exiting.")
 
     def await_scan(dev):
         usb_scanner = evdev.InputDevice(dev)
@@ -260,6 +262,10 @@ class InputHandler:
                             InputHandler.process_scan(scanned_code)
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
+                            if do_speak:
+                                speak_result("Invalid code scanned.")
+                            else:
+                                audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
 ih = InputHandler()
 ih.select_scanner()
