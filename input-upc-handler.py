@@ -141,7 +141,7 @@ class InputHandler:
         """Determine if the scanned code type and determine its corresponding name."""
         # Check timestamp of previous scan and reset opcodes and locations if required
         scanned_code = InputHandler.scanned_code
-        if int(dt.now() - InputHandler.last_scan_time) > CODE_SELECTION_LIFETIME:
+        if dt.now() - InputHandler.last_scan_time > CODE_SELECTION_LIFETIME:
             InputHandler.DEFAULT_LOCATION = InputHandler.storage_location_codes[0]
             InputHandler.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
         InputHandler.last_scan_time = dt.now()
