@@ -9,21 +9,19 @@ import subprocess
 import datetime
 import simpleaudio as sa
 
-INPUT_LISTENER = False
-GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
-GROCY_API_KEY = os.environ["GROCY_API_KEY"]
-
-#GROCY_DEFAULT_LOCATION_ID = 10110
-GROCY_DEFAULT_QUANTITY_UNIT = "2"
-
-#LOCATION_RANGE = (10110, 10120) # Grocy UserData Field attaching barcode to stock location
-
-BARCODE_API_URL = "http://10.8.0.55:5555"
-#barcode_api_sources = ["off","usda","uhtt"]
-
 dt = datetime.datetime
 td = datetime.timedelta
 
+# TODO move most of these messy declarations to configuration files or something
+
+INPUT_LISTENER = False
+GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
+GROCY_API_KEY = os.environ["GROCY_API_KEY"]
+GROCY_DEFAULT_QUANTITY_UNIT = "1"
+GROCY_DEFAULT_QUANTITY_FACTOR = "1.0"
+GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
+CODE_SELECTION_LIFETIME = 600000 # Time to reset selections of opcodes and locations to default, in ms
+BARCODE_API_URL = "http://10.8.0.55:5555"
 do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
 remote_speaker = True # Set to false for onboard playback
 
@@ -50,10 +48,10 @@ feedback_tones = {
     "timer_transfer_reset":"./wav/timer_transfer.reset.wav"
 }
 
+## TODO: add headless setup dialog for mapping opcode values to custom barcodes
 opcodes = {
-    "create":10100,
-    "add":10101,
-    "consume":10102
+    "add":"10101",
+    "consume":"10102"
     }
 
 endpoint_prefixes = {
@@ -68,181 +66,172 @@ endpoint_suffixes = {
     "consume":"/consume"
 }
 
-class InputHandler():
-    active_opcode  = "consume"
-    scanned_code = ""
-    scanned_name = ""
-    scanned_product = {}
-    locations = []
-    DEFAULT_LOCATION = {}
-    SELECTED_LOCATION = None
+## TODO: add headless setup dialog for mapping stock locations to custom barcodes
 
-    def speak_result(result):
-        subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
+def speak_result(result):
+    """Use TTS for audible feedback."""
+    subprocess.call(["/home/ywr/speak_result", f'\"{result}\"']) #Abstract this call out or something
 
-    def audible_playback(status):
-        if remote_speaker:
-            subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"'])
-        else:
-            audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
-            playback_object = audible_object.play()
-            playback_object.wait_done()
+def audible_playback(status):
+    """Use wav files for audible feedback."""
+    if remote_speaker:
+        subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"']) #Abstract this call out or something
+    else:
+        audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
+        playback_object = audible_object.play()
+        playback_object.wait_done()
 
+class InputHandler:
+    def __init__(self):
+        active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+        scanned_code = ""
+        scanned_name = ""
+        storage_locations = []
+        storage_location_codes = []
+        DEFAULT_LOCATION = {}
+        SELECTED_LOCATION = {}
+        last_scan_time = dt.now()
+        self.prepare_storage_locations()
 
     def get_product_info(barcode):
+        """Get info from grocy API about a scanned barcode."""
         print(f"Getting product info for {barcode}")
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
         r_data = json.loads(r.text)
-        InputHandler.scanned_product = r_data["product"]
-        print(r_data)
+        if r.status_code == "404":
+            return None
+        elif r.status_code == "200":
+            return r_data["product"]["name"]
 
-    def prepare_locations():
+    def get_barcode_info(barcode):
+        """Get info from barcode API abot a scanned barcode."""
+        r_url = f"{BARCODE_API_URL}/grocy/{barcode}"
+        r = requests.get(r_url)
+        r_data = json.loads(r.text)
+        if r.status_code == "404":
+            return None
+        elif r.status_code == "200":
+            return r_data["product_name"]
+
+    def prepare_storage_locations(self):
+        """Attempt to map location barcodes to locations known by grocy."""
+        InputHandler.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
+        InputHandler.storage_location_codes = []
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
         r_data = json.loads(r.text)
-        InputHandler.locations = []
         for i in r_data:
-            if "default" in i["description"].lower() and not InputHandler.SELECTED_LOCATION:
-                InputHandler.DEFAULT_LOCATION = {"id":i["id"], "barcode":i["userfields"]["barcode"]}
-                print(f"Default location found: {InputHandler.DEFAULT_LOCATION}")
-            if i["userfields"]:
-                InputHandler.locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
-#         print(f'Locations list built: {InputHandler.locations}')
+            # Ignore location if barcode userfield is not present
+            if not i["userfields"]["barcode"]:
+                print(f"No barcode set for storage location: {i['name']}")
+            elif i["description"]:
+                # Use a default location if one is declared within grocy
+                if "default" in i["description"].lower():
+                    # Jump to conclusions and prepend this entry to storage locations and set the default location
+                    InputHandler.storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + InputHandler.storage_locations
+                    InputHandler.DEFAULT_LOCATION = InputHandler.storage_locations[0]
+                else:
+                    InputHandler.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
+        for i in InputHandler.storage_locations: # This doesn't save us much time to prebuild
+            InputHandler.storage_location_codes.append(i["barcode"])
 
-    def process_scan(scanned_code):
-        InputHandler.prepare_locations()
-        location_codes = []
-#        print(list(opcodes.values()))
-        for i in InputHandler.locations:
-            location_codes.append(i["barcode"])
-        print(location_codes)
-        if int(scanned_code) in list(opcodes.values()):
+    def process_scan():
+        """Determine if the scanned code type and determine its corresponding name."""
+        # Check timestamp of previous scan and reset opcodes and locations if required
+        scanned_code = InputHandler.scanned_code
+        if dt.now() - InputHandler.last_scan_time > CODE_SELECTION_LIFETIME:
+            InputHandler.DEFAULT_LOCATION = InputHandler.storage_location_codes[0]
+            InputHandler.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+        InputHandler.last_scan_time = dt.now()
+        if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
-                if k[1] == int(scanned_code):
+                if k[1] == scanned_code:
                     InputHandler.active_opcode = k[0]
                     print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     if do_speak:
-                        InputHandler.speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
+                        speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     else:
-                        InputHandler.audible_playback(InputHandler.active_opcode)
-        elif scanned_code in location_codes:
-            for i in InputHandler.locations:
+                        audible_playback(InputHandler.active_opcode)
+        elif scanned_code in InputHandler.storage_location_codes:
+            for i in InputHandler.storage_locations:
                 if i["barcode"] == scanned_code:
                     InputHandler.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
                     if do_speak:
-                        InputHandler.speak_result(f"LOCATION CODE DETECTED.")
+                        speak_result(f"LOCATION CODE DETECTED.")
                     else:
-                        InputHandler.audible_playback("transfer") #TODO add a location code sound?
+                        audible_playback("transfer") #TODO add a location code sound?
+        elif len(scanned_code) >= 12:
+            print(f"PRODUCT CODE SCANNED: {scanned_code}.")
+            InputHandler.scanned_name = get_product_info(scanned_code)
+            if not InputHandler.scanned_name:
+                InputHandler.scanned_name = get_barcode_info(scanned_code)
+            if not InputHandler.scanned_name:
+                InputHandler.scanned_name = "Unknown Product"
+                create_inventory_item()
+            modify_inventory_stock()
         else:
-            print(f"BARCODE SCANNED: {scanned_code}.")
-            InputHandler.build_api_url(scanned_code)
+            if do_speak:
+                speak_result("Invalid code scanned.")
+            else:
+                audible_playback("error_item_exists") # TODO find more soundbytes for error types
 
-    def build_api_url(scanned_code):
-        active_opcode = InputHandler.active_opcode
-        if active_opcode != "create":
-            print(f"API URL: {endpoint_prefixes[active_opcode]}{scanned_code}{endpoint_suffixes[active_opcode]}")
-            InputHandler.build_inventory_request(f"{endpoint_prefixes[active_opcode]}{scanned_code}{endpoint_suffixes[active_opcode]}")
-        else:
-            print(f"API URL: {endpoint_prefixes[active_opcode]}")
-            request_url = f"{endpoint_prefixes[active_opcode]}"
-            print("JSON request data required.")
-            InputHandler.build_create_request(endpoint_prefixes[active_opcode])
-
-    def build_inventory_request(url):
-        prev_opcode = ""
+    def modify_inventory_stock():
+        """Add or Consume grocy stock for the scanned product.""" 
+        url = endpoint_prefixes[InputHandler.active_opcode]
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
         req["amount"] = 1
-        req["best_before_date"] = (dt.now() + td(36500)).strftime("%Y-%m-%d")
-        print("Adding impossibly distant best-before date...")
+        req["best_before_date"] = (dt.now() + td(36500)).strftime("%Y-%m-%d") # Add impossibly-distant expiration date for future work
         req["transaction_type"] = InputHandler.active_opcode
-        d = json.dumps(req)
-        r = requests.post(url, data=d, headers=head)
-        r_dict = json.loads(r.text)
-        print(f"API request: {r.request}")
-        print(f"API response: {r.text}")
-        if "id" in r_dict.keys():
-            InputHandler.get_product_info(InputHandler.scanned_code)
-            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+        r = requests.post(url, data=json.dumps(req), headers=head)
+        if r.status_code == "200":
             if do_speak:
-                InputHandler.speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+                speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_name} succeeded.")
             else:
-                InputHandler.audible_playback(InputHandler.active_opcode)
-        elif "error_message" in r_dict.keys():
-            InputHandler.scanned_name = None
-            if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
-                print("Barcode not found in inventory; attempting to lookup product info via barcode.")
-                prev_opcode = InputHandler.active_opcode
-                InputHandler.active_opcode = "create"
-                InputHandler.build_api_url(InputHandler.scanned_code)
-                if InputHandler.scanned_name:
-                    print("New product created from found info. Reattempting inventory request.")
-                    InputHandler.active_opcode = prev_opcode
-                    InputHandler.build_inventory_request(url)
-                else:
-                    print("error: no scanned name found.")
-                    InputHandler.audible_playback("error_no_item_remaining")
-                    # print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
-                    # InputHandler.scanned_name = InputHandler.scanned_code
-                    # InputHandler.build_create_request(endpoint_prefixes["create"])
-                    # InputHandler.active_opcode = prev_opcode
-                    # InputHandler.build_inventory_request(f"{endpoint_prefixes[InputHandler.active_opcode]}{InputHandler.scanned_code}{endpoint_suffixes[InputHandler.active_opcode]}")
+                audible_playback(InputHandler.active_opcode)
+        elif "amount" in json.loads(r.text)["error_message"].lower():
+            if do_speak:
+                speak_result(f"All stock of {InputHandler.scanned_name} has been consumed.")
             else:
-                print(r_dict["error_message"])
-                InputHandler.audible_playback("error_no_item_remaining") #TODO designate a general error tone
+                audible_playback("error_no_item_remaining")
 
-
-    def build_create_request(url):
-        r_url = f"{BARCODE_API_URL}/grocy/{InputHandler.scanned_code}"
-        print(f"Sending upc request to {r_url}...")
-        r = requests.get(r_url)
- #       print(f"response: {r.text}")
-        r_dict = json.loads(r.text)
-#        print(r_dict)
-#        for i in r_dict["results"]:
-        InputHandler.lookup_error = False
-        if "error" in r_dict.keys():
-            r_dict["product_name"] = InputHandler.scanned_code
-            del r_dict["error"]
-            print(f"No info found on scanned code: {InputHandler.scanned_code}")
-            InputHandler.lookup_error = True
+    def create_inventory_item():
+        """Create a new grocy inventory item for the scanned product."""
+        url = endpoint_prefixes["create"]
+        head = {}
+        head["content-type"] = "application/json"
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        req = []
+        req["name"] = InputHandler.scanned_name
+        req["barcode"] = InputHandler.scanned_code
+        if InputHandler.SELECTED_LOCATION:
+            req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
         else:
-            print("building request to create item...")
-            head = {}
-            head["content-type"] = "application/json"
-            head["GROCY-API-KEY"] = GROCY_API_KEY
-            req = r_dict
-            if InputHandler.lookup_error:
-                req["name"] = InputHandler.scanned_name
-                req["barcode"] = InputHandler.scanned_code
-            if InputHandler.SELECTED_LOCATION:
-                req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
+            req["location_id"] = InputHandler.DEFAULT_LOCATION["id"]
+        req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
+        req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
+        req["qu_factor_purchase_to_stock"] = GROCY_DEFAULT_QUANTITY_FACTOR
+        r = requests.post(url, data=json.dumps(req), headers=head)
+        if r.status_code == "200":
+            if do_speak:
+                speak_result("Creating new entry.")
             else:
-                req["location_id"] = InputHandler.DEFAULT_LOCATION["id"]
-            print(f'Location ID used: {req["location_id"]}')
-            req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
-            req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
-            req["qu_factor_purchase_to_stock"] = "1.0"
-            d = json.dumps(req)
-            print(f"Sending grocy request to {url}")
-            r = requests.post(url, data=d, headers=head)
-            print(f"API request: {r.request}")
-            print(f"API response: {r.text}")
+                audible_playback("create")
+        else:
+            audible_playback("error_item_exists") # Maybe this result is not necessary
 
-    def select_scanner(): # this is ugly and bad and i should feel bad for writing it
+    def select_scanner():
         devices = []
         for i in range(20):
             if Path(f"/dev/input/event{str(i)}").exists():
                 devices.append(f"/dev/input/event{str(i)}")
-#        print(devices)
         for device in devices:
-#            print(evdev.InputDevice(device).name)
             faith = 0
             for i in ["bar", "code", "scanner"]:
                 if i in evdev.InputDevice(device).name.lower():
@@ -252,8 +241,6 @@ class InputHandler():
                 InputHandler.await_scan(device)
                 INPUT_LISTENER = device
                 break
-        print("No scanners found; exiting.")
-
 
     def await_scan(dev):
         usb_scanner = evdev.InputDevice(dev)
@@ -275,10 +262,10 @@ class InputHandler():
                             InputHandler.process_scan(scanned_code)
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
+                            if do_speak:
+                                speak_result("Invalid code scanned.")
+                            else:
+                                audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
-#debug laziness
-#InputHandler.scanned_code = "070470290614" # comment this debug laziness
-#InputHandler.build_create_request(endpoint_prefixes["create"]) # comment this debug laziness
-
-#uncomment for normalcy
-InputHandler.select_scanner()
+ih = InputHandler()
+ih.select_scanner()
