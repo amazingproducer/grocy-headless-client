@@ -114,7 +114,7 @@ class InputHandler:
         elif r.status_code == "200":
             return r_data["product_name"]
 
-    def prepare_storage_locations(self):
+    def prepare_storage_locations():
         """Attempt to map location barcodes to locations known by grocy."""
         InputHandler.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
         InputHandler.storage_location_codes = []
