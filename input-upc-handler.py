@@ -206,7 +206,7 @@ class InputHandler:
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        req = []
+        req = {}
         req["name"] = InputHandler.scanned_name
         req["barcode"] = InputHandler.scanned_code
         if InputHandler.SELECTED_LOCATION:
