@@ -13,6 +13,9 @@ INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
 GROCY_API_KEY = os.environ["GROCY_API_KEY"]
 
+# TODO move most of these messy declarations to configuration files or something
+
+
 #GROCY_DEFAULT_LOCATION_ID = 10110
 GROCY_DEFAULT_QUANTITY_UNIT = "2"
 
@@ -50,6 +53,7 @@ feedback_tones = {
     "timer_transfer_reset":"./wav/timer_transfer.reset.wav"
 }
 
+## TODO: add headless setup dialog for mapping opcode values to custom barcodes
 opcodes = {
     "create":10100,
     "add":10101,
@@ -69,7 +73,6 @@ endpoint_suffixes = {
 }
 
 ## TODO: add headless setup dialog for mapping stock locations to custom barcodes
-storage_locations_codes = [] # First entry will be used as the default
 
 def speak_result(result):
     """Use TTS for audible feedback."""
@@ -84,53 +87,54 @@ def audible_playback(status):
         playback_object = audible_object.play()
         playback_object.wait_done()
 
-# I'm not sure I need to make a whole class for this
 
-# class InputHandler:
-#     def __init__(self):
-#         active_opcode  = "consume"
-#         scanned_code = ""
-#         scanned_name = ""
-#         scanned_product = {}
-#         locations = []
-#         DEFAULT_LOCATION = {}
-#         SELECTED_LOCATION = None
+class InputHandler:
+    def __init__(self):
+        active_opcode  = "consume"
+        scanned_code = ""
+        scanned_name = ""
+        scanned_product = {}
+        storage_locations = []
+        storage_location_codes = []
+        DEFAULT_LOCATION = {}
+        SELECTED_LOCATION = None
+        self.prepare_storage_locations()
 
-def get_product_info(barcode):
-    """Get info from grocy about a scanned barcode."""
-    print(f"Getting product info for {barcode}")
-    head = {}
-    head["GROCY-API-KEY"] = GROCY_API_KEY
-    r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
-    r_data = json.loads(r.text)
-#    InputHandler.scanned_product = r_data["product"]
-    if r.status_code == "404":
-        return None
-    return r_data["product"]["name"]
+    def get_product_info(barcode):
+        """Get info from grocy about a scanned barcode."""
+        print(f"Getting product info for {barcode}")
+        head = {}
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
+        r_data = json.loads(r.text)
+    #    InputHandler.scanned_product = r_data["product"]
+        if r.status_code == "404":
+            return None
+        return r_data["product"]["name"]
 
-def prepare_storage_locations():
-    """Attempt to map location barcodes to locations known by grocy."""
-    storage_locations = []
-    head = {}
-    head["GROCY-API-KEY"] = GROCY_API_KEY
-    r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
-    r_data = json.loads(r.text)
-#    InputHandler.locations = []
-    for i in r_data:
-        # Ignore location if barcode userfield is not present
-        if not i["userfields"]["barcode"]:
-            print(f"No barcode set for storage location: {i["name"]}")
-        elif i["description"]:
-            # Use a default location if one is declared within grocy
-            if "default" in i["description"].lower():
-                # Jump to conclusions and prepend this entry to storage locations as the default
-                storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + storage_locations
-            else:
-                storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
-    for i in storage_locations: # This is dumb
-        storage_location_codes.append(i["barcode"])
-    return storage_location_codes
-    print(f"Storage locations prepared: {len(storage_location_codes)}")
+    def prepare_storage_locations(self):
+        """Attempt to map location barcodes to locations known by grocy."""
+        InputHandler.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
+        InputHandler.storage_location_codes = []
+        head = {}
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
+        r_data = json.loads(r.text)
+    #    InputHandler.locations = []
+        for i in r_data:
+            # Ignore location if barcode userfield is not present
+            if not i["userfields"]["barcode"]:
+                print(f"No barcode set for storage location: {i["name"]}")
+            elif i["description"]:
+                # Use a default location if one is declared within grocy
+                if "default" in i["description"].lower():
+                    # Jump to conclusions and prepend this entry to storage locations as the default
+                    InputHandler.storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + InputHandler.storage_locations
+                else:
+                    InputHandler.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
+        for i in InputHandler.storage_locations: # This is dumb
+            InputHandler.storage_location_codes.append(i["barcode"])
+#        return InputHandler.storage_location_codes
 
     def process_scan(scanned_code):
         """Determine if the scanned code was an opcode or a UPC and respond accordingly."""
@@ -140,7 +144,9 @@ def prepare_storage_locations():
 #        for i in InputHandler.locations:
 #            location_codes.append(i["barcode"])
 #        print(location_codes)
-        prepare_locations()
+
+# Preparing locations with each scan? Ridiculous
+#        prepare_locations()
         if int(scanned_code) in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == int(scanned_code):
@@ -300,8 +306,9 @@ def prepare_storage_locations():
                             print("Non-numeric barcode scanned. This is not a UPC.")
 
 #debug laziness
-#InputHandler.scanned_code = "070470290614" # comment this debug laziness
-#InputHandler.build_create_request(endpoint_prefixes["create"]) # comment this debug laziness
+#ih.scanned_code = "070470290614" # comment this debug laziness
+#ih.build_create_request(endpoint_prefixes["create"]) # comment this debug laziness
 
 #uncomment for normalcy
-InputHandler.select_scanner()
+ih = InputHandler()
+ih.select_scanner()
