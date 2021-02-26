@@ -82,15 +82,15 @@ def audible_playback(status):
         playback_object.wait_done()
 
 class InputHandler:
-    def __init__():
-        active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
-        scanned_code = ""
-        scanned_name = ""
-        storage_locations = []
-        storage_location_codes = []
-        DEFAULT_LOCATION = {}
-        SELECTED_LOCATION = {}
-        last_scan_time = dt.now()
+#    def __init__():
+    active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+    scanned_code = ""
+    scanned_name = ""
+    storage_locations = []
+    storage_location_codes = []
+    DEFAULT_LOCATION = {}
+    SELECTED_LOCATION = {}
+    last_scan_time = dt.now()
 
     def get_product_info(barcode):
         """Get info from grocy API about a scanned barcode."""
