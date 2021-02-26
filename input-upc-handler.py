@@ -165,9 +165,9 @@ class InputHandler:
                         audible_playback("transfer") #TODO add a location code sound?
         elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
-            InputHandler.scanned_name = get_product_info(scanned_code)
+            InputHandler.scanned_name = InputHandler.get_product_info(scanned_code)
             if not InputHandler.scanned_name:
-                InputHandler.scanned_name = get_barcode_info(scanned_code)
+                InputHandler.scanned_name = InputHandler.get_barcode_info(scanned_code)
             if not InputHandler.scanned_name:
                 InputHandler.scanned_name = "Unknown Product"
                 InputHandler.create_inventory_item()
