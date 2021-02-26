@@ -194,7 +194,7 @@ class InputHandler:
                 speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_name} succeeded.")
             else:
                 audible_playback(InputHandler.active_opcode)
-        elif "amount" in json.loads(r.text)["error_message"].lower():
+        elif "amount" in json.loads(r.text)["error_message"]:
             if do_speak:
                 speak_result(f"All stock of {InputHandler.scanned_name} has been consumed.")
             else:
