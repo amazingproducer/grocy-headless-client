@@ -83,41 +83,28 @@ def audible_playback(status):
         playback_object = audible_object.play()
         playback_object.wait_done()
 
-# Surely there's a neater place for this
-storage_locations = []
-storage_location_codes = []
-# or this
-def prepare_storage_locations():
-    """Attempt to map location barcodes to locations known by grocy."""
-    head = {}
-    head["GROCY-API-KEY"] = GROCY_API_KEY
-    r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
-    r_data = json.loads(r.text)
-    for i in r_data:
-        # Ignore location if barcode userfield is not present
-        if not i["userfields"]["barcode"]:
-            print(f"No barcode set for storage location: {i['name']}")
-        elif i["description"]:
-            # Use a default location if one is declared within grocy
-            if "default" in i["description"].lower():
-                # Jump to conclusions and prepend this entry to storage locations and set the default location
-                storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + storage_locations
-                DEFAULT_LOCATION = storage_locations[0]
-            else:
-                storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
-    for i in storage_locations: # This doesn't save us much time to prebuild
-        storage_location_codes.append(i["barcode"])
-
-
 class ScannedCode: # methods which gather information to turn a scanned barcode into a complete object for GrocyClient
     def __init__(self, code):
         self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
         self.scanned_code = code
         self.scanned_name = None
-        self.storage_locations = storage_locations
-        self.storage_location_codes = storage_location_codes
-        self.DEFAULT_LOCATION = DEFAULT_LOCATION
+        self.storage_locations = []
+        self.storage_location_codes = []
+        self.DEFAULT_LOCATION = {}
         self.SELECTED_LOCATION = {}
+        self.last_scan_time = dt.now()
+        self.refresh_check()
+
+    def refresh_check(self):
+        print("Checking time elapsed since last scan and quality of location and opcode values...")
+        if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME or self.DEFAULT_LOCATION == {}:
+            print("... Maximum time elapsed since last scan; resetting location and opcode values...")
+            self.DEFAULT_LOCATION = {}
+            self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+            self.prepare_storage_locations()
+            print("...Done.")
+        else:
+            print("...Done. Nothing to update.")
         self.last_scan_time = dt.now()
 
     def get_product_info(self):
@@ -153,19 +140,44 @@ class ScannedCode: # methods which gather information to turn a scanned barcode 
         else:
             print(r.status_code, type(r.status_code))
 
+    def prepare_storage_locations(self):
+        """Attempt to map location barcodes to locations known by grocy."""
+        # Do i still need to empty these fields? I just initialized them
+        self.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
+        self.storage_location_codes = []
+        head = {}
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
+        r_data = json.loads(r.text)
+        for i in r_data:
+            # Ignore location if barcode userfield is not present
+            if not i["userfields"]["barcode"]:
+                print(f"No barcode set for storage location: {i['name']}")
+            elif i["description"]:
+                # Use a default location if one is declared within grocy
+                if "default" in i["description"].lower():
+                    # Jump to conclusions and prepend this entry to storage locations and set the default location
+                    self.storage_locations = [{"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]}] + self.storage_locations
+                    self.DEFAULT_LOCATION = self.storage_locations[0]
+            else:
+                self.storage_locations.append({"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]})
+        for i in self.storage_locations: # This doesn't save us much time to prebuild
+            self.storage_location_codes.append(i["barcode"])
+
 
 class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock objects
     def __init__(self, code):
         super().__init__(code)
+        self.process_scan()
 
     def process_scan(self):
         """Determine if the scanned code type and determine its corresponding name."""
         # Check timestamp of previous scan and reset opcodes and locations if required
         scanned_code = self.scanned_code
-        if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME:
-            self.DEFAULT_LOCATION = self.storage_location_codes[0]
-            self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
-        self.last_scan_time = dt.now()
+        # if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME:
+        #     self.DEFAULT_LOCATION = self.storage_location_codes[0]
+        #     self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+        # self.last_scan_time = dt.now()
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
@@ -186,15 +198,20 @@ class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock 
                         audible_playback("transfer") #TODO add a location code sound?
         elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
-            self.scanned_name = self.get_product_info(scanned_code)
+            print(self.scanned_name)
+            self.scanned_name = self.get_product_info()
+            print(self.scanned_name)
             if not self.scanned_name:
-                self.scanned_name = self.get_barcode_info(scanned_code)
-            if not self.scanned_name:
-                self.scanned_name = "Unknown Product"
-                print("creating new inventory item")
-                self.create_inventory_item()
-            print("adding one unit to stock of new inventory item")
-            self.modify_inventory_stock()
+                print("product not found in grocy api")
+                self.scanned_name = self.get_barcode_info()
+                print(self.scanned_name)
+                if not self.scanned_name:
+                    self.scanned_name = "Unknown Product"
+                    print("creating inventory item without api info")
+                    self.create_inventory_item()
+                else:
+                    print("creating inventory item from api info")
+                    self.create_inventory_item()
         else:
             if do_speak:
                 speak_result("Invalid code scanned.")
@@ -233,7 +250,7 @@ class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock 
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
-        req["name"] = self.scanned_code
+        req["name"] = self.scanned_name
         req["barcode"] = self.scanned_code
         if self.SELECTED_LOCATION:
             req["location_id"] = self.SELECTED_LOCATION["id"]
@@ -254,7 +271,6 @@ class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock 
 
 class InputHandler: # methods to set up a USB HID barcode scanner and send its scans to ScannedCode
     def select_scanner():
-        InputHandler.prepare_storage_locations()
         devices = []
         for i in range(20):
             if Path(f"/dev/input/event{str(i)}").exists():
@@ -296,6 +312,5 @@ class InputHandler: # methods to set up a USB HID barcode scanner and send its s
                             else:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
-prepare_storage_locations()
-print(f"Storage locations prepared. Default location: {DEFAULT_LOCATION['name']}")
-InputHandler.select_scanner()
+#InputHandler.select_scanner()
+GrocyClient("2222222222222")
