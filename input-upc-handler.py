@@ -267,5 +267,4 @@ class InputHandler:
                             else:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
-ih = InputHandler()
-ih.select_scanner()
+InputHandler.select_scanner()
