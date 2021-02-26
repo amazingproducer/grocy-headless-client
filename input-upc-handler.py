@@ -54,8 +54,13 @@ feedback_tones = {
 }
 
 ## TODO: add headless setup dialog for mapping opcode values to custom barcodes
+# opcodes = {
+#     "create":"10100",
+#     "add":"10101",
+#     "consume":"10102"
+#     }
+# Let's remove support for explicitly using the create opcode
 opcodes = {
-    "create":"10100",
     "add":"10101",
     "consume":"10102"
     }
@@ -93,11 +98,10 @@ class InputHandler:
         active_opcode  = "consume"
         scanned_code = ""
         scanned_name = ""
-        scanned_product = {}
         storage_locations = []
         storage_location_codes = []
         DEFAULT_LOCATION = {}
-        SELECTED_LOCATION = None
+        SELECTED_LOCATION = {}
         self.prepare_storage_locations()
 
     def get_product_info(barcode):
@@ -137,11 +141,12 @@ class InputHandler:
             elif i["description"]:
                 # Use a default location if one is declared within grocy
                 if "default" in i["description"].lower():
-                    # Jump to conclusions and prepend this entry to storage locations as the default
+                    # Jump to conclusions and prepend this entry to storage locations and set the default location
                     InputHandler.storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + InputHandler.storage_locations
+                    InputHandler.DEFAULT_LOCATION = InputHandler.storage_location[0]
                 else:
                     InputHandler.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
-        for i in InputHandler.storage_locations: # This is dumb
+        for i in InputHandler.storage_locations: # This doesn't save us much time to prebuild
             InputHandler.storage_location_codes.append(i["barcode"])
 
     def process_scan(scanned_code):
@@ -173,7 +178,10 @@ class InputHandler:
                 InputHandler.scanned_name = get_barcode_info(scanned_code)
             if not InputHandler.scanned_name:
                 InputHandler.scanned_name = "Unknown Product"
+                # Create new stock item via grocy api
+                create_inventory_item()
             # Call the grocy api to execute the proper command with this new information
+            modify_inventory_stock()
 #            InputHandler.build_api_url(scanned_code)
 
 # TODO get rid of the create opcode and get rid of this
@@ -188,88 +196,46 @@ class InputHandler:
             print("JSON request data required.")
             InputHandler.build_create_request(endpoint_prefixes[active_opcode])
 
-    def build_inventory_request(url): # this is ugly and needs work
-        prev_opcode = ""
+    def modify_inventory_stock():
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
         req["amount"] = 1
-        req["best_before_date"] = (dt.now() + td(36500)).strftime("%Y-%m-%d")
-        print("Adding impossibly distant best-before date...")
+        req["best_before_date"] = (dt.now() + td(36500)).strftime("%Y-%m-%d") # Add impossibly-distant expiration date for future work
         req["transaction_type"] = InputHandler.active_opcode
-        d = json.dumps(req)
-        r = requests.post(url, data=d, headers=head)
-        r_dict = json.loads(r.text)
-        print(f"API request: {r.request}")
-        print(f"API response: {r.text}")
-        if "id" in r_dict.keys():
-            InputHandler.get_product_info(InputHandler.scanned_code)
-            print(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+        r = requests.post(url, data=json.dumps(req), headers=head)
+        if r.status_code == "200":
             if do_speak:
-                speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_product['name']} succeeded.")
+                speak_result(f"Request to {InputHandler.active_opcode} {InputHandler.scanned_name} succeeded.")
             else:
                 audible_playback(InputHandler.active_opcode)
-        elif "error_message" in r_dict.keys():
-            InputHandler.scanned_name = None
-            if r_dict["error_message"] == f"No product with barcode {InputHandler.scanned_code} found":
-                print("Barcode not found in inventory; attempting to lookup product info via barcode.")
-                prev_opcode = InputHandler.active_opcode
-                InputHandler.active_opcode = "create"
-                InputHandler.build_api_url(InputHandler.scanned_code)
-                if InputHandler.scanned_name:
-                    print("New product created from found info. Reattempting inventory request.")
-                    InputHandler.active_opcode = prev_opcode
-                    InputHandler.build_inventory_request(url)
-                else:
-                    print("error: no scanned name found.")
-                    audible_playback("error_no_item_remaining")
-                    # print("Barcode not found in any dataset; using barcode as name and reattempting inventory request.")
-                    # InputHandler.scanned_name = InputHandler.scanned_code
-                    # InputHandler.build_create_request(endpoint_prefixes["create"])
-                    # InputHandler.active_opcode = prev_opcode
-                    # InputHandler.build_inventory_request(f"{endpoint_prefixes[InputHandler.active_opcode]}{InputHandler.scanned_code}{endpoint_suffixes[InputHandler.active_opcode]}")
+        elif "amount" in json.loads(r.text)["error_message"].lower():
+            if do_speak:
+                speak_result(f"All stock of {InputHandler.scanned_name} has been consumed.")
             else:
-                print(r_dict["error_message"])
-                audible_playback("error_no_item_remaining") #TODO designate a general error tone
+                audible_playback("error_no_item_remaining")
 
-
-    def build_create_request(url):
-        r_url = f"{BARCODE_API_URL}/grocy/{InputHandler.scanned_code}"
-        print(f"Sending upc request to {r_url}...")
-        r = requests.get(r_url)
- #       print(f"response: {r.text}")
-        r_dict = json.loads(r.text)
-#        print(r_dict)
-#        for i in r_dict["results"]:
-        InputHandler.lookup_error = False
-        if "error" in r_dict.keys():
-            r_dict["product_name"] = InputHandler.scanned_code
-            del r_dict["error"]
-            print(f"No info found on scanned code: {InputHandler.scanned_code}")
-            InputHandler.lookup_error = True
+    def create_inventory_item():
+        url = endpoint_prefixes["create"]
+        head = {}
+        head["content-type"] = "application/json"
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        req = []
+        req["name"] = InputHandler.scanned_name
+        req["barcode"] = InputHandler.scanned_code
+        if InputHandler.SELECTED_LOCATION:
+            req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
         else:
-            print("building request to create item...")
-            head = {}
-            head["content-type"] = "application/json"
-            head["GROCY-API-KEY"] = GROCY_API_KEY
-            req = r_dict
-            if InputHandler.lookup_error:
-                req["name"] = InputHandler.scanned_name
-                req["barcode"] = InputHandler.scanned_code
-            if InputHandler.SELECTED_LOCATION:
-                req["location_id"] = InputHandler.SELECTED_LOCATION["id"]
-            else:
-                req["location_id"] = InputHandler.DEFAULT_LOCATION["id"]
-            print(f'Location ID used: {req["location_id"]}')
-            req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
-            req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
-            req["qu_factor_purchase_to_stock"] = "1.0"
-            d = json.dumps(req)
-            print(f"Sending grocy request to {url}")
-            r = requests.post(url, data=d, headers=head)
-            print(f"API request: {r.request}")
-            print(f"API response: {r.text}")
+            req["location_id"] = InputHandler.DEFAULT_LOCATION["id"]
+        req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
+        req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
+        req["qu_factor_purchase_to_stock"] = "1.0"
+        r = requests.post(url, data=json.dumps(req), headers=head)
+        if r.status_code == "200":
+            audible_playback("create")
+        else:
+            audible_playback("error_item_exists") # Maybe this result is not necessary
 
     def select_scanner(): # this is ugly and bad and i should feel bad for writing it
         devices = []
@@ -289,7 +255,6 @@ class InputHandler:
                 INPUT_LISTENER = device
                 break
         print("No scanners found; exiting.")
-
 
     def await_scan(dev):
         usb_scanner = evdev.InputDevice(dev)
