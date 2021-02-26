@@ -132,7 +132,7 @@ class InputHandler:
                 if "default" in i["description"].lower():
                     # Jump to conclusions and prepend this entry to storage locations and set the default location
                     InputHandler.storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + InputHandler.storage_locations
-                    InputHandler.DEFAULT_LOCATION = InputHandler.storage_location[0]
+                    InputHandler.DEFAULT_LOCATION = InputHandler.storage_locations[0]
                 else:
                     InputHandler.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
         for i in InputHandler.storage_locations: # This doesn't save us much time to prebuild
