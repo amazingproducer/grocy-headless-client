@@ -82,7 +82,7 @@ def audible_playback(status):
         playback_object.wait_done()
 
 class InputHandler:
-    def __init__(self):
+    def __init__():
         active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
         scanned_code = ""
         scanned_name = ""
@@ -91,7 +91,6 @@ class InputHandler:
         DEFAULT_LOCATION = {}
         SELECTED_LOCATION = {}
         last_scan_time = dt.now()
-        self.prepare_storage_locations()
 
     def get_product_info(barcode):
         """Get info from grocy API about a scanned barcode."""
@@ -227,6 +226,7 @@ class InputHandler:
             audible_playback("error_item_exists") # Maybe this result is not necessary
 
     def select_scanner():
+        prepare_storage_locations()
         devices = []
         for i in range(20):
             if Path(f"/dev/input/event{str(i)}").exists():
