@@ -124,7 +124,7 @@ class InputHandler:
         for i in r_data:
             # Ignore location if barcode userfield is not present
             if not i["userfields"]["barcode"]:
-                print(f"No barcode set for storage location: {i["name"]}")
+                print(f"No barcode set for storage location: {i['name']}")
             elif i["description"]:
                 # Use a default location if one is declared within grocy
                 if "default" in i["description"].lower():
