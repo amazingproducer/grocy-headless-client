@@ -170,8 +170,8 @@ class InputHandler:
                 InputHandler.scanned_name = get_barcode_info(scanned_code)
             if not InputHandler.scanned_name:
                 InputHandler.scanned_name = "Unknown Product"
-                create_inventory_item()
-            modify_inventory_stock()
+                InputHandler.create_inventory_item()
+            InputHandler.modify_inventory_stock()
         else:
             if do_speak:
                 speak_result("Invalid code scanned.")
@@ -226,7 +226,7 @@ class InputHandler:
             audible_playback("error_item_exists") # Maybe this result is not necessary
 
     def select_scanner():
-        prepare_storage_locations()
+        InputHandler.prepare_storage_locations()
         devices = []
         for i in range(20):
             if Path(f"/dev/input/event{str(i)}").exists():
