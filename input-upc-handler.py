@@ -81,23 +81,24 @@ def audible_playback(status):
         playback_object = audible_object.play()
         playback_object.wait_done()
 
-class InputHandler:
-#    def __init__():
-    active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
-    scanned_code = ""
-    scanned_name = None
-    storage_locations = []
-    storage_location_codes = []
-    DEFAULT_LOCATION = {}
-    SELECTED_LOCATION = {}
-    last_scan_time = dt.now()
+class ScannedCode:
+    def __init__(self, code):
+    self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+    self.scanned_code = code
+    self.scanned_name = None
+    self.storage_locations = []
+    self.storage_location_codes = []
+    self.DEFAULT_LOCATION = {}
+    self.SELECTED_LOCATION = {}
+    self.last_scan_time = dt.now()
+    self.prepare_storage_locations()
 
-    def get_product_info(barcode):
+    def get_product_info(self):
         """Get info from grocy API about a scanned barcode."""
-        print(f"Getting product info for {barcode} from grocy...")
+        print(f"Getting product info for {self.scanned_code} from grocy...")
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
         if r.status_code == 400:
             print("item not found in grocy db")
@@ -109,10 +110,10 @@ class InputHandler:
             print(r.status_code, type(r.status_code))
             return None
 
-    def get_barcode_info(barcode):
+    def get_barcode_info(self):
         """Get info from barcode API abot a scanned barcode."""
-        print(f"Getting product info for {barcode} from barcode api...")
-        r_url = f"{BARCODE_API_URL}{barcode}"
+        print(f"Getting product info for {self.scanned_code} from barcode api...")
+        r_url = f"{BARCODE_API_URL}{self.scanned_code}"
         print(r_url)
         r = requests.get(r_url)
         if r.status_code == 404:
@@ -125,10 +126,10 @@ class InputHandler:
         else:
             print(r.status_code, type(r.status_code))
 
-    def prepare_storage_locations():
+    def prepare_storage_locations(self):
         """Attempt to map location barcodes to locations known by grocy."""
-        InputHandler.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
-        InputHandler.storage_location_codes = []
+        self.storage_locations = [] # Do I need to store the whole dictionary? Will I ever need to use more than the codes?
+        self.storage_location_codes = []
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
@@ -141,13 +142,14 @@ class InputHandler:
                 # Use a default location if one is declared within grocy
                 if "default" in i["description"].lower():
                     # Jump to conclusions and prepend this entry to storage locations and set the default location
-                    InputHandler.storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + InputHandler.storage_locations
-                    InputHandler.DEFAULT_LOCATION = InputHandler.storage_locations[0]
+                    self.storage_locations = [{"id":i["id"], "barcode":i["userfields"]["barcode"]}] + self.storage_locations
+                    self.DEFAULT_LOCATION = self.storage_locations[0]
                 else:
-                    InputHandler.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
-        for i in InputHandler.storage_locations: # This doesn't save us much time to prebuild
-            InputHandler.storage_location_codes.append(i["barcode"])
+                    self.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
+        for i in self.storage_locations: # This doesn't save us much time to prebuild
+            self.storage_location_codes.append(i["barcode"])
 
+class InputHandler:
     def process_scan():
         """Determine if the scanned code type and determine its corresponding name."""
         # Check timestamp of previous scan and reset opcodes and locations if required
