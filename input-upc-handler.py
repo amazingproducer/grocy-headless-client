@@ -55,9 +55,9 @@ feedback_tones = {
 
 ## TODO: add headless setup dialog for mapping opcode values to custom barcodes
 opcodes = {
-    "create":10100,
-    "add":10101,
-    "consume":10102
+    "create":"10100",
+    "add":"10101",
+    "consume":"10102"
     }
 
 endpoint_prefixes = {
@@ -107,7 +107,6 @@ class InputHandler:
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{barcode}', headers=head)
         r_data = json.loads(r.text)
-    #    InputHandler.scanned_product = r_data["product"]
         if r.status_code == "404":
             return None
         return r_data["product"]["name"]
@@ -120,7 +119,6 @@ class InputHandler:
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
         r_data = json.loads(r.text)
-    #    InputHandler.locations = []
         for i in r_data:
             # Ignore location if barcode userfield is not present
             if not i["userfields"]["barcode"]:
@@ -134,30 +132,20 @@ class InputHandler:
                     InputHandler.storage_locations.append({"id":i["id"], "barcode":i["userfields"]["barcode"]})
         for i in InputHandler.storage_locations: # This is dumb
             InputHandler.storage_location_codes.append(i["barcode"])
-#        return InputHandler.storage_location_codes
 
     def process_scan(scanned_code):
         """Determine if the scanned code was an opcode or a UPC and respond accordingly."""
-#        InputHandler.prepare_locations()
-#        location_codes = []
-#        print(list(opcodes.values()))
-#        for i in InputHandler.locations:
-#            location_codes.append(i["barcode"])
-#        print(location_codes)
-
-# Preparing locations with each scan? Ridiculous
-#        prepare_locations()
-        if int(scanned_code) in list(opcodes.values()):
+        if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
-                if k[1] == int(scanned_code):
+                if k[1] == scanned_code:
                     InputHandler.active_opcode = k[0]
                     print(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     if do_speak:
                         speak_result(f"OPCODE DETECTED: {InputHandler.active_opcode}.")
                     else:
                         audible_playback(InputHandler.active_opcode)
-        elif scanned_code in InputHandler.location_codes:
-            for i in InputHandler.locations:
+        elif scanned_code in InputHandler.storage_location_codes:
+            for i in InputHandler.storage_locations:
                 if i["barcode"] == scanned_code:
                     InputHandler.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
@@ -165,7 +153,7 @@ class InputHandler:
                         speak_result(f"LOCATION CODE DETECTED.")
                     else:
                         audible_playback("transfer") #TODO add a location code sound?
-        else:
+        elif len(scanned_code) >= 12:
             print(f"BARCODE SCANNED: {scanned_code}.")
             InputHandler.build_api_url(scanned_code)
 
