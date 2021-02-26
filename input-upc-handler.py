@@ -101,7 +101,7 @@ class InputHandler:
         self.prepare_storage_locations()
 
     def get_product_info(barcode):
-        """Get info from grocy about a scanned barcode."""
+        """Get info from grocy API about a scanned barcode."""
         print(f"Getting product info for {barcode}")
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
@@ -109,7 +109,18 @@ class InputHandler:
         r_data = json.loads(r.text)
         if r.status_code == "404":
             return None
-        return r_data["product"]["name"]
+        elif r.status_code == "200":
+            return r_data["product"]["name"]
+
+    def get_barcode_info(barcode):
+        """Get info from barcode API abot a scanned barcode."""
+        r_url = f"{BARCODE_API_URL}/grocy/{barcode}"
+        r = requests.get(r_url)
+        r_data = json.loads(r.text)
+        if r.status_code == "404":
+            return None
+        elif r.status_code == "200":
+            return r_data["product_name"]
 
     def prepare_storage_locations(self):
         """Attempt to map location barcodes to locations known by grocy."""
@@ -134,7 +145,7 @@ class InputHandler:
             InputHandler.storage_location_codes.append(i["barcode"])
 
     def process_scan(scanned_code):
-        """Determine if the scanned code was an opcode or a UPC and respond accordingly."""
+        """Determine if the scanned code type and determine its corresponding name."""
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
@@ -154,8 +165,16 @@ class InputHandler:
                     else:
                         audible_playback("transfer") #TODO add a location code sound?
         elif len(scanned_code) >= 12:
-            print(f"BARCODE SCANNED: {scanned_code}.")
-            InputHandler.build_api_url(scanned_code)
+            print(f"PRODUCT CODE SCANNED: {scanned_code}.")
+            # Search for the code vide grocy api
+            InputHandler.scanned_name = get_product_info(scanned_code)
+            if not InputHandler.scanned_name:
+                # Search for the code via barcode api
+                InputHandler.scanned_name = get_barcode_info(scanned_code)
+            if not InputHandler.scanned_name:
+                InputHandler.scanned_name = "Unknown Product"
+            # Call the grocy api to execute the proper command with this new information
+#            InputHandler.build_api_url(scanned_code)
 
 # TODO get rid of the create opcode and get rid of this
     def build_api_url(scanned_code): # This function only exists to support a near-useless feature -- scanning a new item into inventory with no intention of adding any stock.
