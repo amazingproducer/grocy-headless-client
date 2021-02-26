@@ -259,7 +259,7 @@ class InputHandler:
                         scan_buffer = []
                         if scanned_code.isnumeric():
                             InputHandler.scanned_code = scanned_code
-                            InputHandler.process_scan(scanned_code)
+                            InputHandler.process_scan()
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
                             if do_speak:
