@@ -96,15 +96,15 @@ class ScannedCode: # methods which gather information to turn a scanned barcode 
         self.refresh_check()
 
     def refresh_check(self):
-        print("Checking time elapsed since last scan and quality of location and opcode values...")
+#        print("Checking time elapsed since last scan and quality of location and opcode values...")
         if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME or self.DEFAULT_LOCATION == {}:
-            print("... Maximum time elapsed since last scan; resetting location and opcode values...")
+#            print("... Maximum time elapsed since last scan; resetting location and opcode values...")
             self.DEFAULT_LOCATION = {}
             self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
             self.prepare_storage_locations()
-            print("...Done.")
+#            print("...Done.")
         else:
-            print("...Done. Nothing to update.")
+#            print("...Done. Nothing to update.")
         self.last_scan_time = dt.now()
 
     def get_product_info(self):
@@ -115,10 +115,10 @@ class ScannedCode: # methods which gather information to turn a scanned barcode 
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
         if r.status_code == 400:
-            print("item not found in grocy db")
+#            print("item not found in grocy db")
             return None
         elif r.status_code == 200:
-            print(r_data)
+#            print(r_data)
             return r_data["product"]["name"]
         else:
             print(r.status_code, type(r.status_code))
@@ -131,11 +131,11 @@ class ScannedCode: # methods which gather information to turn a scanned barcode 
         print(r_url)
         r = requests.get(r_url)
         if r.status_code == 404:
-            print("barcode api lookup failed")
+#            print("barcode api lookup failed")
             return None
         elif r.status_code == 200:
             r_data = json.loads(r.text)
-            print(r_data)
+#            print(r_data)
             return r_data["product_name"]
         else:
             print(r.status_code, type(r.status_code))
@@ -198,19 +198,19 @@ class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock 
                         audible_playback("transfer") #TODO add a location code sound?
         elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
-            print(self.scanned_name)
+#            print(self.scanned_name)
             self.scanned_name = self.get_product_info()
-            print(self.scanned_name)
+#            print(self.scanned_name)
             if not self.scanned_name:
-                print("product not found in grocy api")
+#                print("product not found in grocy api")
                 self.scanned_name = self.get_barcode_info()
-                print(self.scanned_name)
+#                print(self.scanned_name)
                 if not self.scanned_name:
                     self.scanned_name = "Unknown Product"
-                    print("creating inventory item without api info")
+#                    print("creating inventory item without api info")
                     self.create_inventory_item()
                 else:
-                    print("creating inventory item from api info")
+#                    print("creating inventory item from api info")
                     self.create_inventory_item()
         else:
             if do_speak:
@@ -245,7 +245,7 @@ class GrocyClient(ScannedCode): # methods which directly manipulate grocy stock 
     def create_inventory_item(self):
         """Create a new grocy inventory item for the scanned product."""
         url = endpoint_prefixes["create"]
-        print(f"url: {url}")
+#        print(f"url: {url}")
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
@@ -312,5 +312,5 @@ class InputHandler: # methods to set up a USB HID barcode scanner and send its s
                             else:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
-#InputHandler.select_scanner()
-GrocyClient("2222222222222")
+InputHandler.select_scanner()
+#GrocyClient("2222222222222")
