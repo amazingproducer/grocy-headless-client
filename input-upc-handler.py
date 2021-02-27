@@ -205,7 +205,7 @@ class GrocyClient(ScannedCode):
             if not self.scanned_name:
                 self.scanned_name = self.get_barcode_info()
                 if not self.scanned_name:
-                    self.scanned_name = "Unknown Product"
+                    self.scanned_name = scanned_code
                     self.create_inventory_item()
                 else:
                     self.create_inventory_item()
