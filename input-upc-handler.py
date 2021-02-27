@@ -22,8 +22,8 @@ GROCY_DEFAULT_QUANTITY_FACTOR = 1.0
 GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
 CODE_SELECTION_LIFETIME = td(minutes=10)
 BARCODE_API_URL = "https://upc.shamacon.us/grocy/"
-do_speak = True # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
-remote_speaker = True # Set to false for onboard playback
+do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
+remote_speaker = False # Set to false for onboard playback
 
 speaker = {
     "destination":"seiryuu",
@@ -72,7 +72,10 @@ endpoint_suffixes = {
 ## TODO: make these external calls asynchronous
 def speak_result(result):
     """Use TTS for audible feedback."""
-    subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
+    if remote_speaker:
+        subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
+    else:
+        subprocess.call(["/home/ywr/speak_result_local", f'\"{result}\"'])
 
 def audible_playback(status):
     """Use wav files for audible feedback."""
@@ -85,36 +88,35 @@ def audible_playback(status):
 
 class ScannedCode: 
     """gather information to turn a scanned barcode into a complete object for GrocyClient"""
+    active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+    storage_locations = []
+    storage_location_codes = []
+    default_location_id = None
+    DEFAULT_LOCATION = {}
+    SELECTED_LOCATION = {}
+    last_scan_time = dt.now()
+
     def __init__(self, code):
-        self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
         self.scanned_code = code
         self.scanned_name = None
-        self.storage_locations = []
-        self.storage_location_codes = []
-        self.default_location_id = None
-        self.DEFAULT_LOCATION = {}
-        self.SELECTED_LOCATION = {}
-        self.last_scan_time = dt.now()
         self.refresh_check()
 
     def refresh_check(self):
-        if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME or self.DEFAULT_LOCATION == {}:
-            print(dt.now() - self.last_scan_time, CODE_SELECTION_LIFETIME)
-            print(self.DEFAULT_LOCATION)
-            self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+        if dt.now() - ScannedCode.last_scan_time > CODE_SELECTION_LIFETIME or ScannedCode.DEFAULT_LOCATION == {}:
+#            print(dt.now() - ScannedCode.last_scan_time, CODE_SELECTION_LIFETIME)
+#            print(ScannedCode.DEFAULT_LOCATION)
+            ScannedCode.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
             self.get_user_defaults()
             self.prepare_storage_locations()
         else:
-            self.last_scan_time = dt.now()
+            ScannedCode.last_scan_time = dt.now()
 
     def get_product_info(self):
         """Get info from grocy API about a scanned barcode."""
-        print(f"Getting product info for {self.scanned_code} from grocy...")
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
-        speak_result(f"Grocy status: {r.status_code}")
         if r.status_code == 400:
             return None
         elif r.status_code == 200:
@@ -125,11 +127,8 @@ class ScannedCode:
 
     def get_barcode_info(self):
         """Get info from barcode API abot a scanned barcode."""
-        print(f"Getting product info for {self.scanned_code} from barcode api...")
         r_url = f"{BARCODE_API_URL}{self.scanned_code}"
-        print(r_url)
         r = requests.get(r_url)
-        speak_result(f"UPC status: {r.status_code}")
         if r.status_code == 404:
             return None
         elif r.status_code == 200:
@@ -144,31 +143,30 @@ class ScannedCode:
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/user/settings', headers=head)
         r_data = json.loads(r.text)
-        self.GROCY_DEFAULT_QUANTITY_UNIT = r_data['product_presets_qu_id']
-        self.default_location_id = r_data['product_presets_location_id']
-        speak_result(f"Default quantity id: {r_data['product_presets_qu_id']}")
-        speak_result(f"Default location id: {r_data['product_presets_location_id']}")
+        ScannedCode.GROCY_DEFAULT_QUANTITY_UNIT = r_data['product_presets_qu_id']
+        ScannedCode.default_location_id = r_data['product_presets_location_id']
+#        print(f"Default quantity id: {r_data['product_presets_qu_id']}")
+#        print(f"Default location id: {r_data['product_presets_location_id']}")
         
     def prepare_storage_locations(self):
         """Attempt to map location barcodes to locations known by grocy."""
-        self.storage_locations = []
-        self.storage_location_codes = []
+        ScannedCode.storage_locations = []
+        ScannedCode.storage_location_codes = []
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
         r_data = json.loads(r.text)
-        speak_result(f"Location status: {r.status_code}")
         for i in r_data:
             if not i["userfields"]["barcode"]:
                 print(f"No barcode set for storage location: {i['name']}")
-            elif i["id"] == self.default_location_id:
-                    self.storage_locations = [{"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]}] + self.storage_locations
-                    self.DEFAULT_LOCATION = i
-                    print(self.DEFAULT_LOCATION)
+            elif i["id"] == ScannedCode.default_location_id:
+                    ScannedCode.storage_locations = [{"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]}] + ScannedCode.storage_locations
+                    ScannedCode.DEFAULT_LOCATION = i
+                    print(ScannedCode.DEFAULT_LOCATION)
             else:
-                self.storage_locations.append({"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]})
-        for i in self.storage_locations:
-            self.storage_location_codes.append(i["barcode"])
+                ScannedCode.storage_locations.append({"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]})
+        for i in ScannedCode.storage_locations:
+            ScannedCode.storage_location_codes.append(i["barcode"])
 
 
 class GrocyClient(ScannedCode): 
@@ -183,16 +181,16 @@ class GrocyClient(ScannedCode):
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
-                    self.active_opcode = k[0]
-                    print(f"OPCODE DETECTED: {self.active_opcode}.")
+                    ScannedCode.active_opcode = k[0]
+                    print(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
                     if do_speak:
-                        speak_result(f"OPCODE DETECTED: {self.active_opcode}.")
+                        speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
                     else:
-                        audible_playback(self.active_opcode)
-        elif scanned_code in self.storage_location_codes:
-            for i in self.storage_locations:
+                        audible_playback(ScannedCode.active_opcode)
+        elif scanned_code in ScannedCode.storage_location_codes:
+            for i in ScannedCode.storage_locations:
                 if i["barcode"] == scanned_code:
-                    self.SELECTED_LOCATION = i
+                    ScannedCode.SELECTED_LOCATION = i
                     print(f"LOCATION CODE DETECTED. This code will be used with subsequent scans.")
                     if do_speak:
                         speak_result(f"LOCATION CODE DETECTED.")
@@ -217,42 +215,26 @@ class GrocyClient(ScannedCode):
 
     def modify_inventory_stock(self):
         """Add or Consume grocy stock for the scanned product.""" 
-        url = endpoint_prefixes[self.active_opcode] + self.scanned_code + endpoint_suffixes[self.active_opcode]
+        url = endpoint_prefixes[ScannedCode.active_opcode] + self.scanned_code + endpoint_suffixes[ScannedCode.active_opcode]
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
         req = {}
         req["amount"] = 1
         req["best_before_date"] = (dt.now() + td(36500)).strftime("%Y-%m-%d") # Add impossibly-distant expiration date for future work
-        req["transaction_type"] = self.active_opcode
+        req["transaction_type"] = ScannedCode.active_opcode
         r = requests.post(url, data=json.dumps(req), headers=head)
         if r.status_code == 200:
-            # if self.active_opcode == "add":
-            #     if self.SELECTED_LOCATION: # Transfer new item to selected location
-            #         self.transfer_product_unit()
             if do_speak:
-                speak_result(f"Request to {self.active_opcode} {self.scanned_name} succeeded.")
+                speak_result(f"Request to {ScannedCode.active_opcode} {self.scanned_name} succeeded.")
             else:
-                audible_playback(self.active_opcode)
+                audible_playback(ScannedCode.active_opcode)
         else: 
-            print(f"modify_inventory_stock error: {r.status_code}, {url}")
             if "amount" in json.loads(r.text)["error_message"]:
                 if do_speak:
                     speak_result(f"All stock of {self.scanned_name} has been consumed.")
                 else:
                     audible_playback("error_no_item_remaining")
-
-    # def transfer_inventory_item(self):
-    #     """Transfer scanned object from default location to preselected location"""
-    #     head = {}
-    #     head["content-type"] = "application/json"
-    #     head["GROCY-API-KEY"] = GROCY_API_KEY
-    #     req = {}
-    #     req["amount"] = 1
-    #     req["location_id_from"] = self.DEFAULT_LOCATION["id"]
-    #     req["location_id_to"] = self.SELECTED_LOCATION["id"]
-    #     r = requests.post(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}/transfer', data=json.dumps(req), headers=head)
-
 
     def create_inventory_item(self):
         """Create a new grocy inventory item for the scanned product."""
@@ -263,17 +245,16 @@ class GrocyClient(ScannedCode):
         req = {}
         req["name"] = self.scanned_name
         req["barcode"] = self.scanned_code
-        if self.SELECTED_LOCATION:
-            speak_result("using preselected location")
-            req["location_id"] = self.SELECTED_LOCATION["id"]
+        if ScannedCode.SELECTED_LOCATION:
+            print(f"using preselected location: {ScannedCode.SELECTED_LOCATION['name']}")
+            req["location_id"] = ScannedCode.SELECTED_LOCATION["id"]
         else:
-            req["location_id"] = self.DEFAULT_LOCATION["id"]
+            req["location_id"] = ScannedCode.DEFAULT_LOCATION["id"]
         req["qu_id_purchase"] = GROCY_DEFAULT_QUANTITY_UNIT
         req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
         req["qu_factor_purchase_to_stock"] = GROCY_DEFAULT_QUANTITY_FACTOR
         r = requests.post(url, data=json.dumps(req), headers=head)
-        speak_result(f"Creation status: {r.status_code}")
-        if r.status_code == "200":
+        if r.status_code == 200:
             if do_speak:
                 speak_result("Creating new entry.")
             else:
@@ -326,5 +307,4 @@ class InputHandler:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
 InputHandler.select_scanner()
-GrocyClient("10115")
-GrocyClient("2222222222222")
+
