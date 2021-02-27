@@ -22,8 +22,8 @@ GROCY_DEFAULT_QUANTITY_FACTOR = 1.0
 GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
 CODE_SELECTION_LIFETIME = td(minutes=10)
 BARCODE_API_URL = "https://upc.shamacon.us/grocy/"
-do_speak = False # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
-remote_speaker = False # Set to false for onboard playback
+do_speak = True # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
+remote_speaker = True # Set to false for onboard playback
 
 speaker = {
     "destination":"seiryuu",
@@ -105,6 +105,7 @@ class ScannedCode:
         if dt.now() - ScannedCode.last_scan_time > CODE_SELECTION_LIFETIME or ScannedCode.DEFAULT_LOCATION == {}:
 #            print(dt.now() - ScannedCode.last_scan_time, CODE_SELECTION_LIFETIME)
 #            print(ScannedCode.DEFAULT_LOCATION)
+            print("Resetting opcode and location settings.")
             ScannedCode.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
             self.get_user_defaults()
             self.prepare_storage_locations()
@@ -307,4 +308,3 @@ class InputHandler:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
 InputHandler.select_scanner()
-
