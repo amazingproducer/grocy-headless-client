@@ -99,7 +99,8 @@ class ScannedCode:
 
     def refresh_check(self):
         if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME or self.DEFAULT_LOCATION == {}:
-            self.DEFAULT_LOCATION = {}
+            print(dt.now() - self.last_scan_time, CODE_SELECTION_LIFETIME)
+            print(self.DEFAULT_LOCATION)
             self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
             self.get_user_defaults()
             self.prepare_storage_locations()
@@ -162,7 +163,8 @@ class ScannedCode:
                 print(f"No barcode set for storage location: {i['name']}")
             elif i["id"] == self.default_location_id:
                     self.storage_locations = [{"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]}] + self.storage_locations
-                    self.DEFAULT_LOCATION = self.storage_locations[0]
+                    self.DEFAULT_LOCATION = i
+                    print(self.DEFAULT_LOCATION)
             else:
                 self.storage_locations.append({"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]})
         for i in self.storage_locations:
@@ -225,6 +227,9 @@ class GrocyClient(ScannedCode):
         req["transaction_type"] = self.active_opcode
         r = requests.post(url, data=json.dumps(req), headers=head)
         if r.status_code == 200:
+            # if self.active_opcode == "add":
+            #     if self.SELECTED_LOCATION: # Transfer new item to selected location
+            #         self.transfer_product_unit()
             if do_speak:
                 speak_result(f"Request to {self.active_opcode} {self.scanned_name} succeeded.")
             else:
@@ -237,6 +242,18 @@ class GrocyClient(ScannedCode):
                 else:
                     audible_playback("error_no_item_remaining")
 
+    # def transfer_inventory_item(self):
+    #     """Transfer scanned object from default location to preselected location"""
+    #     head = {}
+    #     head["content-type"] = "application/json"
+    #     head["GROCY-API-KEY"] = GROCY_API_KEY
+    #     req = {}
+    #     req["amount"] = 1
+    #     req["location_id_from"] = self.DEFAULT_LOCATION["id"]
+    #     req["location_id_to"] = self.SELECTED_LOCATION["id"]
+    #     r = requests.post(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}/transfer', data=json.dumps(req), headers=head)
+
+
     def create_inventory_item(self):
         """Create a new grocy inventory item for the scanned product."""
         url = endpoint_prefixes["create"]
@@ -247,6 +264,7 @@ class GrocyClient(ScannedCode):
         req["name"] = self.scanned_name
         req["barcode"] = self.scanned_code
         if self.SELECTED_LOCATION:
+            speak_result("using preselected location")
             req["location_id"] = self.SELECTED_LOCATION["id"]
         else:
             req["location_id"] = self.DEFAULT_LOCATION["id"]
@@ -308,4 +326,5 @@ class InputHandler:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
 InputHandler.select_scanner()
-#GrocyClient("2222222222222")
+GrocyClient("10115")
+GrocyClient("2222222222222")
