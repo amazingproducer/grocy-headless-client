@@ -17,8 +17,8 @@ td = datetime.timedelta
 INPUT_LISTENER = False
 GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
 GROCY_API_KEY = os.environ["GROCY_API_KEY"]
-GROCY_DEFAULT_QUANTITY_UNIT = "1"
-GROCY_DEFAULT_QUANTITY_FACTOR = "1.0"
+GROCY_DEFAULT_QUANTITY_UNIT = 2
+GROCY_DEFAULT_QUANTITY_FACTOR = 1.0
 GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
 CODE_SELECTION_LIFETIME = td(minutes=10)
 BARCODE_API_URL = "https://upc.shamacon.us/grocy/"
@@ -91,6 +91,7 @@ class ScannedCode:
         self.scanned_name = None
         self.storage_locations = []
         self.storage_location_codes = []
+        self.default_location_id = None
         self.DEFAULT_LOCATION = {}
         self.SELECTED_LOCATION = {}
         self.last_scan_time = dt.now()
@@ -100,6 +101,7 @@ class ScannedCode:
         if dt.now() - self.last_scan_time > CODE_SELECTION_LIFETIME or self.DEFAULT_LOCATION == {}:
             self.DEFAULT_LOCATION = {}
             self.active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+            self.get_user_defaults()
             self.prepare_storage_locations()
         else:
             self.last_scan_time = dt.now()
@@ -111,6 +113,7 @@ class ScannedCode:
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
+        speak_result(f"Grocy status: {r.status_code}")
         if r.status_code == 400:
             return None
         elif r.status_code == 200:
@@ -125,6 +128,7 @@ class ScannedCode:
         r_url = f"{BARCODE_API_URL}{self.scanned_code}"
         print(r_url)
         r = requests.get(r_url)
+        speak_result(f"UPC status: {r.status_code}")
         if r.status_code == 404:
             return None
         elif r.status_code == 200:
@@ -133,6 +137,17 @@ class ScannedCode:
         else:
             print(r.status_code, type(r.status_code))
 
+    def get_user_defaults(self):
+        """Determine default values as determined by user settings"""
+        head = {}
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        r = requests.get(f'{GROCY_DOMAIN}/user/settings', headers=head)
+        r_data = json.loads(r.text)
+        self.GROCY_DEFAULT_QUANTITY_UNIT = r_data['product_presets_qu_id']
+        self.default_location_id = r_data['product_presets_location_id']
+        speak_result(f"Default quantity id: {r_data['product_presets_qu_id']}")
+        speak_result(f"Default location id: {r_data['product_presets_location_id']}")
+        
     def prepare_storage_locations(self):
         """Attempt to map location barcodes to locations known by grocy."""
         self.storage_locations = []
@@ -141,11 +156,11 @@ class ScannedCode:
         head["GROCY-API-KEY"] = GROCY_API_KEY
         r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
         r_data = json.loads(r.text)
+        speak_result(f"Location status: {r.status_code}")
         for i in r_data:
             if not i["userfields"]["barcode"]:
                 print(f"No barcode set for storage location: {i['name']}")
-            elif i["description"]:
-                if "default" in i["description"].lower():
+            elif i["id"] == self.default_location_id:
                     self.storage_locations = [{"id":i["id"], "name":i["name"], "barcode":i["userfields"]["barcode"]}] + self.storage_locations
                     self.DEFAULT_LOCATION = self.storage_locations[0]
             else:
@@ -191,6 +206,7 @@ class GrocyClient(ScannedCode):
                     self.create_inventory_item()
                 else:
                     self.create_inventory_item()
+            self.modify_inventory_stock()
         else:
             if do_speak:
                 speak_result("Invalid code scanned.")
@@ -238,6 +254,7 @@ class GrocyClient(ScannedCode):
         req["qu_id_stock"] = GROCY_DEFAULT_QUANTITY_UNIT
         req["qu_factor_purchase_to_stock"] = GROCY_DEFAULT_QUANTITY_FACTOR
         r = requests.post(url, data=json.dumps(req), headers=head)
+        speak_result(f"Creation status: {r.status_code}")
         if r.status_code == "200":
             if do_speak:
                 speak_result("Creating new entry.")
@@ -246,6 +263,7 @@ class GrocyClient(ScannedCode):
         else:
             print(r.status_code, r.text)
             audible_playback("error_item_exists") # Maybe this result is not necessary
+
 
 class InputHandler: 
     """set up a USB HID barcode scanner and send its scans to ScannedCode"""
@@ -289,4 +307,5 @@ class InputHandler:
                             else:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
-InputHandler.select_scanner()
+#InputHandler.select_scanner()
+GrocyClient("2222222222222")
