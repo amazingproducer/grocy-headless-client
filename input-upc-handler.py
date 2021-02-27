@@ -43,7 +43,7 @@ feedback_tones = {
     "transfer":"./wav/transfer.wav",
     "error_no_item_remaining":"./wav/error_no.item.remaining.wav",
     "error_item_exists":"./wav/error_item.exists.wav",
-    "timer_location_reset":"./wav/timer_location.reset.wav",
+    "timer_loc  ation_reset":"./wav/timer_location.reset.wav",
     "timer_opcode_reset":"./wav/timer_opcode.reset.wav",
     "timer_transfer_reset":"./wav/timer_transfer.reset.wav"
 }
@@ -300,6 +300,7 @@ class InputHandler:
                         scan_buffer = []
                         if scanned_code.isnumeric():
                             ScannedCode(scanned_code)
+                            print("Complete code scanned:", scanned_code)
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
                             if do_speak:
