@@ -287,7 +287,7 @@ class InputHandler:
         usb_scanner = evdev.InputDevice(dev)
         usb_scanner.grab()
         scan_buffer = []
-        scanned_code = InputHandler.scanned_code
+        scanned_code = None
         for event in usb_scanner.read_loop():
             if event.type == evdev.ecodes.EV_KEY:
                 i = evdev.categorize(event)
