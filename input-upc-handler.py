@@ -307,5 +307,5 @@ class InputHandler:
                             else:
                                 audible_playback("error_no_item_remaining") # TODO srsly get some more audio clips for error types
 
-#InputHandler.select_scanner()
-GrocyClient("2222222222222")
+InputHandler.select_scanner()
+#GrocyClient("2222222222222")
