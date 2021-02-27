@@ -8,68 +8,39 @@ from pathlib import Path
 import subprocess
 import datetime
 import simpleaudio as sa
+from configparser import ConfigParser
 
 dt = datetime.datetime
 td = datetime.timedelta
+INPUT_LISTENER = None
 
-# TODO move most of these messy declarations to configuration files or something
+user_config = ConfigParser()
+user_config.read("config.ini")
 
-INPUT_LISTENER = False
-GROCY_DOMAIN = "https://grocy.i.shamacon.us/api"
-GROCY_API_KEY = os.environ["GROCY_API_KEY"]
-GROCY_DEFAULT_QUANTITY_UNIT = 2
-GROCY_DEFAULT_QUANTITY_FACTOR = 1.0
-GROCY_DEFAULT_INVENTORY_ACTION = "consume" # Used to set the default opcode
-CODE_SELECTION_LIFETIME = td(minutes=10)
-BARCODE_API_URL = "https://upc.shamacon.us/grocy/"
-do_speak = True # Enables tone based feedback. Set to True to enable text-to-speech based feedback.
-remote_speaker = True # Set to false for onboard playback
-
-speaker = {
-    "destination":"seiryuu",
-    "speaker_app":"aplay"
-}
-
-speech = {
-    "destination":"seiryuu",
-    "speech_app":"espeak-ng"
-}
-
-feedback_tones = {
-    "add":"./wav/add.wav",
-    "consume":"./wav/consume.wav",
-    "spoiled":"./wav/spoiled.wav",
-    "create":"./wav/create.wav",
-    "transfer":"./wav/transfer.wav",
-    "error_no_item_remaining":"./wav/error_no.item.remaining.wav",
-    "error_item_exists":"./wav/error_item.exists.wav",
-    "timer_loc  ation_reset":"./wav/timer_location.reset.wav",
-    "timer_opcode_reset":"./wav/timer_opcode.reset.wav",
-    "timer_transfer_reset":"./wav/timer_transfer.reset.wav"
-}
-
+GROCY_DOMAIN = user_config["grocy_settings"].get("domain", "https://grocy.info")
+GROCY_API_KEY = user_config["grocy_settings"].get("api_key", os.environ["GROCY_API_KEY"])
+GROCY_DEFAULT_QUANTITY_UNIT = int(user_config["grocy_settings"]["default_quantity_unit"])
+GROCY_DEFAULT_QUANTITY_FACTOR = float(user_config["grocy_settings"]["default_quantity_factor"])
+GROCY_DEFAULT_INVENTORY_ACTION = user_config["grocy_settings"]["default_inventory_action"]
+BARCODE_API_URL = user_config["grocy_settings"]["barcode_api_url"]
+user_timeout = int(user_config["local_settings"].get("code_selection_lifetime", 10))
+CODE_SELECTION_LIFETIME = td(minutes=user_timeout)
+do_speak = user_config["local_settings"]["do_speak"]
+remote_speaker = user_config["local_settings"]["remote_speaker"]
+speaker = user_config["tone_output_settings"]
+speech = user_config["speech_output_settings"]
+feedback_tones = user_config["feedback_tones"]
 ## TODO: add headless setup dialog for mapping opcode values to custom barcodes
-opcodes = {
-    "add":"10101",
-    "consume":"10102"
-    }
-
-endpoint_prefixes = {
-    "create":f"{GROCY_DOMAIN}/objects/products",
-    "add":f"{GROCY_DOMAIN}/stock/products/by-barcode/",
-    "consume":f"{GROCY_DOMAIN}/stock/products/by-barcode/"
-}
-
-endpoint_suffixes = {
-    "create":None,
-    "add":"/add",
-    "consume":"/consume"
-}
-
 ## TODO: add headless setup dialog for mapping stock locations to custom barcodes
-
+opcodes = user_config["opcodes"]
+endpoint_prefixes = user_config["endpoint_prefixes"]
+endpoint_suffixes = user_config["endpoint_suffixes"]
+print(vars())
+print(GROCY_API_KEY)
+print(os.environ["GROCY_API_KEY"])
 
 ## TODO: make these external calls asynchronous
+## TODO: bring the text to speech and remote speaker apps into the project
 def speak_result(result):
     """Use TTS for audible feedback."""
     if remote_speaker:
