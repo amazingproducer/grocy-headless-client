@@ -99,6 +99,8 @@ class ScannedCode:
     def __init__(self, code):
         self.scanned_code = code
         self.scanned_name = None
+        ScannedCode.scanned_code = code
+        ScannedCode.scanned_name = None
         self.refresh_check()
 
     def refresh_check(self):
