@@ -301,7 +301,7 @@ class InputHandler:
                         scanned_code = "".join(scan_buffer)
                         scan_buffer = []
                         if scanned_code.isnumeric():
-                            ScannedCode(scanned_code)
+                            GrocyClient(scanned_code)
                             print("Complete code scanned:", scanned_code)
                         else:
                             print("Non-numeric barcode scanned. This is not a UPC.")
