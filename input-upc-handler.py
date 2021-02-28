@@ -35,9 +35,6 @@ feedback_tones = user_config["feedback_tones"]
 opcodes = user_config["opcodes"]
 endpoint_prefixes = user_config["endpoint_prefixes"]
 endpoint_suffixes = user_config["endpoint_suffixes"]
-print(vars())
-print(GROCY_API_KEY)
-print(os.environ["GROCY_API_KEY"])
 
 ## TODO: make these external calls asynchronous
 ## TODO: bring the text to speech and remote speaker apps into the project
@@ -64,12 +61,11 @@ class ScannedCode:
     storage_location_codes = []
     default_location_id = None
     DEFAULT_LOCATION = {}
+    FALLBACK_LOCATION = {}
     SELECTED_LOCATION = {}
     last_scan_time = dt.now()
 
     def __init__(self, code):
-        self.scanned_code = code
-        self.scanned_name = None
         ScannedCode.scanned_code = code
         ScannedCode.scanned_name = None
         self.refresh_check()
