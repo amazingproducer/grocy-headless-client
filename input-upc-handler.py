@@ -205,6 +205,12 @@ class GrocyClient(ScannedCode):
             ScannedCode.SELECTED_LOCATION = ScannedCode.FALLBACK_LOCATION
             ScannedCode.FALLBACK_LOCATION = {}
 
+    def insert_transfer_location(self):
+        print("doot")
+
+    def insert_transfer_product(self):
+        print("poot")
+
     def modify_inventory_stock(self):
         """Add or Consume grocy stock for the scanned product.""" 
         url = endpoint_prefixes[ScannedCode.active_opcode] + self.scanned_code + endpoint_suffixes[ScannedCode.active_opcode]
