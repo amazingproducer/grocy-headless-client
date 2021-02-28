@@ -206,9 +206,11 @@ class GrocyClient(ScannedCode):
             ScannedCode.FALLBACK_LOCATION = {}
 
     def insert_transfer_location(self):
+        """Set the destination location of active transfer."""
         print("doot")
 
     def insert_transfer_product(self):
+        """Complete product transfer and reset relevant values."""
         print("poot")
 
     def modify_inventory_stock(self):
