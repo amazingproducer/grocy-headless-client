@@ -197,6 +197,7 @@ class GrocyClient(ScannedCode):
                 audible_playback("error_item_exists") # TODO find more soundbytes for error types
     
     def insert_transfer_opcode(self):
+        """Divert normal flow to manage fallback locations and active transfers."""
         if not ScannedCode.active_transfer:
             if ScannedCode.SELECTED_LOCATION and not ScannedCode.FALLBACK_LOCATION:
                 ScannedCode.FALLBACK_LOCATION = ScannedCode.SELECTED_LOCATION
