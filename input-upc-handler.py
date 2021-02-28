@@ -170,7 +170,7 @@ class GrocyClient(ScannedCode):
                             speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
                         else:
                             audible_playback(ScannedCode.active_opcode)
-        elif scanned_code in ScannedCode.storage_location_codes:
+        elif scanned_code in ScannedCode.storage_location_codes: # TODO: implement response for active transfers
             for i in ScannedCode.storage_locations:
                 if i["barcode"] == scanned_code:
                     ScannedCode.SELECTED_LOCATION = i
@@ -179,7 +179,7 @@ class GrocyClient(ScannedCode):
                         speak_result(f"LOCATION CODE DETECTED.")
                     else:
                         audible_playback("transfer") #TODO add a location code sound?
-        elif len(scanned_code) >= 12:
+        elif len(scanned_code) >= 12: # TODO: implement response for active transfers
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
             self.scanned_name = self.get_product_info()
             if not self.scanned_name:
