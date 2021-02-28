@@ -58,6 +58,7 @@ class ScannedCode:
     """gather information to turn a scanned barcode into a complete object for GrocyClient"""
     active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
     fallback_opcode = None # Used to retain active_opcode when using a transfer instruction
+    active_transfer = False
     storage_locations = []
     storage_location_codes = []
     default_location_id = None
@@ -152,12 +153,23 @@ class GrocyClient(ScannedCode):
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
-                    ScannedCode.active_opcode = k[0]
-                    print(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
-                    if do_speak:
-                        speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
+                    if k[0] == "transfer" or ScannedCode.active_transfer:
+                        if k[0] != "transfer": # Any other opcode during active transfer triggers fallback
+                            ScannedCode.active_opcode = k[0]
+                        else:
+                            print("OPCODE DETECTED: Transfer.")
+                            if do_speak:
+                                speak_result("OPCODE DETECTED: Transfer.")
+                            else:
+                                audible_playback("transfer")
+                        self.insert_transfer_opcode() # do the transfer needful
                     else:
-                        audible_playback(ScannedCode.active_opcode)
+                        ScannedCode.active_opcode = k[0]
+                        print(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
+                        if do_speak:
+                            speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
+                        else:
+                            audible_playback(ScannedCode.active_opcode)
         elif scanned_code in ScannedCode.storage_location_codes:
             for i in ScannedCode.storage_locations:
                 if i["barcode"] == scanned_code:
@@ -183,6 +195,15 @@ class GrocyClient(ScannedCode):
                 speak_result("Invalid code scanned.")
             else:
                 audible_playback("error_item_exists") # TODO find more soundbytes for error types
+    
+    def insert_transfer_opcode(self):
+        if not ScannedCode.active_transfer:
+            if ScannedCode.SELECTED_LOCATION and not ScannedCode.FALLBACK_LOCATION:
+                ScannedCode.FALLBACK_LOCATION = ScannedCode.SELECTED_LOCATION
+            ScannedCode.active_transfer = True
+        elif ScannedCode.FALLBACK_LOCATION:
+            ScannedCode.SELECTED_LOCATION = ScannedCode.FALLBACK_LOCATION
+            ScannedCode.FALLBACK_LOCATION = {}
 
     def modify_inventory_stock(self):
         """Add or Consume grocy stock for the scanned product.""" 
