@@ -57,11 +57,12 @@ def audible_playback(status):
 class ScannedCode: 
     """gather information to turn a scanned barcode into a complete object for GrocyClient"""
     active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+    fallback_opcode = None # Used to retain active_opcode when using a transfer instruction
     storage_locations = []
     storage_location_codes = []
     default_location_id = None
     DEFAULT_LOCATION = {}
-    FALLBACK_LOCATION = {}
+    FALLBACK_LOCATION = {} # Used to retain SELECTED_LOCATION when using a transfer instruction
     SELECTED_LOCATION = {}
     last_scan_time = dt.now()
 
