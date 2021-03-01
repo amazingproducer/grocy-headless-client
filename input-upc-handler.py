@@ -59,6 +59,7 @@ class ScannedCode:
     active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
     fallback_opcode = None # Used to retain active_opcode when using a transfer instruction
     active_transfer = False
+    active_storage_source = None # INT, Used in determining the source of an item marked for transfer
     storage_locations = []
     storage_location_codes = []
     default_location_id = None
@@ -72,6 +73,7 @@ class ScannedCode:
         ScannedCode.scanned_name = None
         self.refresh_check()
 
+# TODO: replace this with an asynchronous, timed reaction
     def refresh_check(self):
         if dt.now() - ScannedCode.last_scan_time > CODE_SELECTION_LIFETIME or ScannedCode.DEFAULT_LOCATION == {}:
 #            print(dt.now() - ScannedCode.last_scan_time, CODE_SELECTION_LIFETIME)
@@ -90,10 +92,13 @@ class ScannedCode:
         r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
         if r.status_code == 400:
+            ScannedCode.active_storage_source = None
             return None
         elif r.status_code == 200:
+            ScannedCode.active_storage_source = r_data["product"]["id"]
             return r_data["product"]["name"]
         else:
+            ScannedCode.active_storage_source = None
             print(r.status_code, type(r.status_code))
             return None
 
@@ -170,7 +175,7 @@ class GrocyClient(ScannedCode):
                             speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
                         else:
                             audible_playback(ScannedCode.active_opcode)
-        elif scanned_code in ScannedCode.storage_location_codes: # TODO: implement response for active transfers
+        elif scanned_code in ScannedCode.storage_location_codes:
             for i in ScannedCode.storage_locations:
                 if i["barcode"] == scanned_code:
                     ScannedCode.SELECTED_LOCATION = i
@@ -179,10 +184,12 @@ class GrocyClient(ScannedCode):
                         speak_result(f"LOCATION CODE DETECTED.")
                     else:
                         audible_playback("transfer") #TODO add a location code sound?
-        elif len(scanned_code) >= 12: # TODO: implement response for active transfers
+        elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
             self.scanned_name = self.get_product_info()
-            if not self.scanned_name:
+            if ScannedCode.active_transfer and self.scanned_name:
+                self.insert_transfer_product()
+            elif not self.scanned_name:
                 self.scanned_name = self.get_barcode_info()
                 if not self.scanned_name:
                     self.scanned_name = scanned_code
@@ -199,20 +206,40 @@ class GrocyClient(ScannedCode):
     def insert_transfer_opcode(self):
         """Divert normal flow to manage fallback locations and active transfers."""
         if not ScannedCode.active_transfer:
+            if not ScannedCode.SELECTED_LOCATION: #ugly
+                ScannedCode.SELECTED_LOCATION = ScannedCode.DEFAULT_LOCATION
             if ScannedCode.SELECTED_LOCATION and not ScannedCode.FALLBACK_LOCATION:
                 ScannedCode.FALLBACK_LOCATION = ScannedCode.SELECTED_LOCATION
             ScannedCode.active_transfer = True
         elif ScannedCode.FALLBACK_LOCATION:
             ScannedCode.SELECTED_LOCATION = ScannedCode.FALLBACK_LOCATION
             ScannedCode.FALLBACK_LOCATION = {}
-
-    def insert_transfer_location(self):
-        """Set the destination location of active transfer."""
-        print("doot")
+            ScannedCode.active_transfer = False
 
     def insert_transfer_product(self):
         """Complete product transfer and reset relevant values."""
-        print("poot")
+        url = endpoint_prefixes["transfer"] + self.scanned_code + endpoint_suffixes["transfer"]
+        head = {}
+        head["content-type"] = "application/json"
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        req = {}
+        req["amount"] = 1
+        req["location_id_from"] = ScannedCode.active_storage_source
+        req["location_id_to"] = ScannedCode.SELECTED_LOCATION
+        r = requests.post(url, data=json.dumps(req), headers=head)
+        ScannedCode.SELECTED_LOCATION = ScannedCode.FALLBACK_LOCATION
+        ScannedCode.FALLBACK_LOCATION = {}
+        ScannedCode.active_transfer = False
+        if r.status_code == 200:
+            if do_speak:
+                speak_result(f"Request to {ScannedCode.active_opcode} {self.scanned_name} succeeded.")
+            else:
+                audible_playback(ScannedCode.active_opcode)
+        else:
+            if do_speak:
+                speak_result(json.loads(r.text)["error_message"])
+            else:
+                audible_playback("error_no_item_remaining")
 
     def modify_inventory_stock(self):
         """Add or Consume grocy stock for the scanned product.""" 
