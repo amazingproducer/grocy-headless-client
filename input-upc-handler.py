@@ -89,7 +89,7 @@ class ScannedCode:
         """Get info from grocy API about a scanned barcode."""
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/api/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
         if r.status_code == 400:
             ScannedCode.active_storage_source = None
@@ -118,7 +118,7 @@ class ScannedCode:
         """Determine default values as determined by user settings"""
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/user/settings', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/api/user/settings', headers=head)
         r_data = json.loads(r.text)
         ScannedCode.GROCY_DEFAULT_QUANTITY_UNIT = r_data['product_presets_qu_id']
         ScannedCode.default_location_id = r_data['product_presets_location_id']
@@ -131,7 +131,7 @@ class ScannedCode:
         ScannedCode.storage_location_codes = []
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/api/objects/locations', headers=head)
         r_data = json.loads(r.text)
         for i in r_data:
             if not i["userfields"]["barcode"]:
