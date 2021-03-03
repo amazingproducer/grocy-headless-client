@@ -266,7 +266,7 @@ class GrocyClient(ScannedCode):
 
     def create_inventory_item(self):
         """Create a new grocy inventory item for the scanned product."""
-        url = endpoint_prefixes["create"]
+        url = f"{GROCY_DOMAIN}/objects/products"
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
