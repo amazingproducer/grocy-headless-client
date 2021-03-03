@@ -8,13 +8,13 @@ from pathlib import Path
 import subprocess
 import datetime
 import simpleaudio as sa
-from configparser import ConfigParser
+from configparser import ConfigParser, ExtendedInterpolation
 
 dt = datetime.datetime
 td = datetime.timedelta
 INPUT_LISTENER = None
 
-user_config = ConfigParser()
+user_config = ConfigParser(interpolation=ExtendedInterpolation())
 user_config.read("config.ini")
 
 GROCY_DOMAIN = user_config["grocy_settings"].get("domain", "https://grocy.info")
