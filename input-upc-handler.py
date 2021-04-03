@@ -41,14 +41,14 @@ endpoint_suffixes = user_config["endpoint_suffixes"]
 def speak_result(result):
     """Use TTS for audible feedback."""
     if remote_speaker:
-        subprocess.call(["/home/ywr/speak_result", f'\"{result}\"'])
+        subprocess.call(["~/speak_result", f'\"{result}\"']) # TODO include these scripts in the repo
     else:
-        subprocess.call(["/home/ywr/speak_result_local", f'\"{result}\"'])
+        subprocess.call(["~/speak_result_local", f'\"{result}\"'])
 
 def audible_playback(status):
     """Use wav files for audible feedback."""
     if remote_speaker:
-        subprocess.call(["/home/ywr/remote_speaker", f'\"{status}\"'])
+        subprocess.call(["~/remote_speaker", f'\"{status}\"'])
     else:
         audible_object = sa.WaveObject.from_wave_file(feedback_tones[status])
         playback_object = audible_object.play()
