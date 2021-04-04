@@ -2,6 +2,9 @@
 
 USB HID based barcode scanner-driven grocy API client.
 
+
+# Development notes that are better placed elsewhere: 
+
 ## At all times, the app must know:
 
 - Active Opcode
