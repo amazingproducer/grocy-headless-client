@@ -8,13 +8,13 @@ from pathlib import Path
 import subprocess
 import datetime
 import simpleaudio as sa
-from configparser import ConfigParser
+from configparser import ConfigParser, ExtendedInterpolation
 
 dt = datetime.datetime
 td = datetime.timedelta
 INPUT_LISTENER = None
 
-user_config = ConfigParser()
+user_config = ConfigParser(interpolation=ExtendedInterpolation())
 user_config.read("config.ini")
 
 GROCY_DOMAIN = user_config["grocy_settings"].get("domain", "https://grocy.info")
@@ -57,11 +57,14 @@ def audible_playback(status):
 class ScannedCode: 
     """gather information to turn a scanned barcode into a complete object for GrocyClient"""
     active_opcode = GROCY_DEFAULT_INVENTORY_ACTION
+    fallback_opcode = None # Used to retain active_opcode when using a transfer instruction
+    active_transfer = False
+    active_storage_source = None # INT, Used in determining the source of an item marked for transfer
     storage_locations = []
     storage_location_codes = []
     default_location_id = None
     DEFAULT_LOCATION = {}
-    FALLBACK_LOCATION = {}
+    FALLBACK_LOCATION = {} # Used to retain SELECTED_LOCATION when using a transfer instruction
     SELECTED_LOCATION = {}
     last_scan_time = dt.now()
 
@@ -70,6 +73,7 @@ class ScannedCode:
         ScannedCode.scanned_name = None
         self.refresh_check()
 
+# TODO: replace this with an asynchronous, timed reaction
     def refresh_check(self):
         if dt.now() - ScannedCode.last_scan_time > CODE_SELECTION_LIFETIME or ScannedCode.DEFAULT_LOCATION == {}:
 #            print(dt.now() - ScannedCode.last_scan_time, CODE_SELECTION_LIFETIME)
@@ -85,13 +89,16 @@ class ScannedCode:
         """Get info from grocy API about a scanned barcode."""
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/stock/products/by-barcode/{self.scanned_code}', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/api/stock/products/by-barcode/{self.scanned_code}', headers=head)
         r_data = json.loads(r.text)
         if r.status_code == 400:
+            ScannedCode.active_storage_source = None
             return None
         elif r.status_code == 200:
+            ScannedCode.active_storage_source = r_data["product"]["id"]
             return r_data["product"]["name"]
         else:
+            ScannedCode.active_storage_source = None
             print(r.status_code, type(r.status_code))
             return None
 
@@ -111,7 +118,7 @@ class ScannedCode:
         """Determine default values as determined by user settings"""
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/user/settings', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/api/user/settings', headers=head)
         r_data = json.loads(r.text)
         ScannedCode.GROCY_DEFAULT_QUANTITY_UNIT = r_data['product_presets_qu_id']
         ScannedCode.default_location_id = r_data['product_presets_location_id']
@@ -124,7 +131,7 @@ class ScannedCode:
         ScannedCode.storage_location_codes = []
         head = {}
         head["GROCY-API-KEY"] = GROCY_API_KEY
-        r = requests.get(f'{GROCY_DOMAIN}/objects/locations', headers=head)
+        r = requests.get(f'{GROCY_DOMAIN}/api/objects/locations', headers=head)
         r_data = json.loads(r.text)
         for i in r_data:
             if not i["userfields"]["barcode"]:
@@ -151,12 +158,23 @@ class GrocyClient(ScannedCode):
         if scanned_code in list(opcodes.values()):
             for k in opcodes.items():
                 if k[1] == scanned_code:
-                    ScannedCode.active_opcode = k[0]
-                    print(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
-                    if do_speak:
-                        speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
+                    if k[0] == "transfer" or ScannedCode.active_transfer:
+                        if k[0] != "transfer": # Any other opcode during active transfer triggers fallback
+                            ScannedCode.active_opcode = k[0]
+                        else:
+                            print("OPCODE DETECTED: Transfer.")
+                            if do_speak:
+                                speak_result("OPCODE DETECTED: Transfer.")
+                            else:
+                                audible_playback("transfer")
+                        self.insert_transfer_opcode() # do the transfer needful
                     else:
-                        audible_playback(ScannedCode.active_opcode)
+                        ScannedCode.active_opcode = k[0]
+                        print(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
+                        if do_speak:
+                            speak_result(f"OPCODE DETECTED: {ScannedCode.active_opcode}.")
+                        else:
+                            audible_playback(ScannedCode.active_opcode)
         elif scanned_code in ScannedCode.storage_location_codes:
             for i in ScannedCode.storage_locations:
                 if i["barcode"] == scanned_code:
@@ -169,7 +187,9 @@ class GrocyClient(ScannedCode):
         elif len(scanned_code) >= 12:
             print(f"PRODUCT CODE SCANNED: {scanned_code}.")
             self.scanned_name = self.get_product_info()
-            if not self.scanned_name:
+            if ScannedCode.active_transfer and self.scanned_name:
+                self.insert_transfer_product()
+            elif not self.scanned_name:
                 self.scanned_name = self.get_barcode_info()
                 if not self.scanned_name:
                     self.scanned_name = scanned_code
@@ -182,6 +202,44 @@ class GrocyClient(ScannedCode):
                 speak_result("Invalid code scanned.")
             else:
                 audible_playback("error_item_exists") # TODO find more soundbytes for error types
+    
+    def insert_transfer_opcode(self):
+        """Divert normal flow to manage fallback locations and active transfers."""
+        if not ScannedCode.active_transfer:
+            if not ScannedCode.SELECTED_LOCATION: #ugly
+                ScannedCode.SELECTED_LOCATION = ScannedCode.DEFAULT_LOCATION
+            if ScannedCode.SELECTED_LOCATION and not ScannedCode.FALLBACK_LOCATION:
+                ScannedCode.FALLBACK_LOCATION = ScannedCode.SELECTED_LOCATION
+            ScannedCode.active_transfer = True
+        elif ScannedCode.FALLBACK_LOCATION:
+            ScannedCode.SELECTED_LOCATION = ScannedCode.FALLBACK_LOCATION
+            ScannedCode.FALLBACK_LOCATION = {}
+            ScannedCode.active_transfer = False
+
+    def insert_transfer_product(self):
+        """Complete product transfer and reset relevant values."""
+        url = endpoint_prefixes["transfer"] + self.scanned_code + endpoint_suffixes["transfer"]
+        head = {}
+        head["content-type"] = "application/json"
+        head["GROCY-API-KEY"] = GROCY_API_KEY
+        req = {}
+        req["amount"] = 1
+        req["location_id_from"] = ScannedCode.active_storage_source
+        req["location_id_to"] = ScannedCode.SELECTED_LOCATION
+        r = requests.post(url, data=json.dumps(req), headers=head)
+        ScannedCode.SELECTED_LOCATION = ScannedCode.FALLBACK_LOCATION
+        ScannedCode.FALLBACK_LOCATION = {}
+        ScannedCode.active_transfer = False
+        if r.status_code == 200:
+            if do_speak:
+                speak_result(f"Request to {ScannedCode.active_opcode} {self.scanned_name} succeeded.")
+            else:
+                audible_playback(ScannedCode.active_opcode)
+        else:
+            if do_speak:
+                speak_result(json.loads(r.text)["error_message"])
+            else:
+                audible_playback("error_no_item_remaining")
 
     def modify_inventory_stock(self):
         """Add or Consume grocy stock for the scanned product.""" 
@@ -208,7 +266,7 @@ class GrocyClient(ScannedCode):
 
     def create_inventory_item(self):
         """Create a new grocy inventory item for the scanned product."""
-        url = endpoint_prefixes["create"]
+        url = f"{GROCY_DOMAIN}/objects/products"
         head = {}
         head["content-type"] = "application/json"
         head["GROCY-API-KEY"] = GROCY_API_KEY
